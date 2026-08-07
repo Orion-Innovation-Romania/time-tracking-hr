@@ -105,7 +105,6 @@ export default function AuditPage() {
                 {users.data?.map((u) => (
                   <SelectItem key={u.id} value={String(u.id)}>
                     {u.username}
-                    {u.role === 'admin' ? ' · admin' : ''}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -71,7 +71,7 @@ export default function PortalPage() {
           <div className="flex items-center gap-3">
             {session.role === 'admin' && (
               <span className="hidden items-center gap-1 text-xs font-medium text-muted-foreground sm:flex">
-                <ShieldCheck className="h-4 w-4" /> admin
+                <ShieldCheck className="h-4 w-4" />
               </span>
             )}
             <span className="text-sm text-muted-foreground">{session.username}</span>

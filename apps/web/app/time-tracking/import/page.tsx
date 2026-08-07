@@ -123,7 +123,7 @@ export default function ImportPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Import access report</h1>
         <p className="text-muted-foreground">
-          Upload an AxTraxNG PDF. It is parsed in memory and the file is discarded after import.
+          Upload an AxTraxNG PDF.
         </p>
       </div>
 
