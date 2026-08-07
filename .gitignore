@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Prisma
+apps/api/prisma/*.db
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Uploads (temp) & generated files
+.uploads/
+apps/api/.uploads/
+exports-tmp/
+
+# Caddy / runtime data
+caddy_data/
+caddy_config/
+pgdata/
+backups/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Test coverage
+coverage/
+playwright-report/
+test-results/

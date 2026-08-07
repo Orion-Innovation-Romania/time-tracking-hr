@@ -1,0 +1,34 @@
+# ============================================================================
+# TTAH user accounts - SOURCE OF TRUTH for who may log in.
+# ----------------------------------------------------------------------------
+# On API startup these entries are synced into the database:
+#   * A new username here is created with its initialPassword and is forced to
+#     change it at first login.
+#   * An existing user keeps the password they chose; only role/active sync.
+#   * Removing a user here DEACTIVATES the account (login blocked); data is kept.
+#   * "Reset password" (admin) reverts a user to the initialPassword below and
+#     forces a change at next login.
+#
+# You cannot log in unless you are listed here. Change these passwords before
+# the first deployment. Strong passwords recommended (>= 10 chars, mixed).
+# ============================================================================
+users:
+  - username: admin
+    role: admin
+    initialPassword: "Admin#Initial1"
+
+  - username: hr1
+    role: user
+    initialPassword: "Hr1#Initial1"
+
+  - username: hr2
+    role: user
+    initialPassword: "Hr2#Initial1"
+
+  - username: hr3
+    role: user
+    initialPassword: "Hr3#Initial1"
+
+  - username: hr4
+    role: user
+    initialPassword: "Hr4#Initial1"

@@ -1,0 +1,281 @@
+// TTAH Prisma schema.
+// Time convention: all wall-clock timestamps from reports are stored as-is
+// (site-local time treated as UTC components). We never convert time zones, so
+// day-grouping and duration math are stable and DST-proof. Format with UTC getters.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  user
+}
+
+enum DoorRole {
+  IN
+  OUT
+  NEUTRAL
+}
+
+enum EventType {
+  ACCESS_GRANTED
+  ACCESS_DENIED
+  OTHER
+}
+
+enum LeaveType {
+  vacation
+  sick
+  remote
+  other
+}
+
+enum ImportStatus {
+  PENDING
+  COMMITTED
+  FAILED
+}
+
+enum ExportKind {
+  summary
+  pontaj
+  raw
+}
+
+enum ConditionType {
+  MIN_SESSION_MINUTES
+  GRACE_START_MINUTES
+  GRACE_END_MINUTES
+  ROUND_DAILY_MINUTES
+  IGNORE_ZONE
+  MAX_DAILY_MINUTES
+}
+
+model User {
+  id                  Int       @id @default(autoincrement())
+  username            String    @unique
+  role                Role      @default(user)
+  passwordHash        String
+  initialPasswordHash String
+  mustChangePassword  Boolean   @default(true)
+  isActive            Boolean   @default(true)
+  failedAttempts      Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  logins          LoginHistory[]
+  imports         ImportBatch[]
+  auditLogs       AuditLog[]
+  exportTemplates ExportTemplate[]
+}
+
+model LoginHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  username  String
+  at        DateTime @default(now())
+  ip        String?
+  userAgent String?
+  success   Boolean
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([username, at])
+  @@index([at])
+}
+
+model Employee {
+  id            Int      @id @default(autoincrement())
+  canonicalName String   @unique
+  displayName   String
+  active        Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  aliases     EmployeeAlias[]
+  departments EmployeeDepartment[]
+  events      AccessEvent[]
+  summaries   DailySummary[]
+  imports     ImportBatch[]
+  leaves      Leave[]
+  schedule    EmployeeSchedule?
+}
+
+model EmployeeAlias {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  rawUserName String   @unique
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
+model EmployeeDepartment {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  department String
+  fromDate   DateTime? @db.Date
+  toDate     DateTime? @db.Date
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, department])
+  @@index([department])
+}
+
+model EmployeeSchedule {
+  employeeId  Int      @id
+  startTime   String?
+  endTime     String?
+  workingDays Int[]
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model Door {
+  id           Int      @id @default(autoincrement())
+  rawLocation  String   @unique
+  readerNo     Int?
+  panel        String?
+  floor        String?
+  zone         String?
+  role         DoorRole @default(NEUTRAL)
+  displayName  String?
+  autoDetected Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  events AccessEvent[]
+
+  @@index([zone])
+}
+
+model ImportBatch {
+  id            Int          @id @default(autoincrement())
+  userId        Int?
+  employeeId    Int?
+  fileName      String
+  fileHash      String       @unique
+  department    String?
+  rangeFrom     DateTime?
+  rangeTo       DateTime?
+  rowsTotal     Int          @default(0)
+  rowsNew       Int          @default(0)
+  rowsDuplicate Int          @default(0)
+  status        ImportStatus @default(PENDING)
+  createdAt     DateTime     @default(now())
+
+  user     User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  employee Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  events   AccessEvent[]
+
+  @@index([employeeId])
+  @@index([createdAt])
+}
+
+model AccessEvent {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int
+  doorId        Int
+  occurredAt    DateTime
+  direction     DoorRole
+  eventType     EventType @default(ACCESS_GRANTED)
+  importBatchId Int?
+
+  employee    Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  door        Door         @relation(fields: [doorId], references: [id], onDelete: Cascade)
+  importBatch ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, occurredAt, doorId, direction])
+  @@index([employeeId, occurredAt])
+  @@index([occurredAt])
+}
+
+model DailySummary {
+  id            Int       @id @default(autoincrement())
+  employeeId    Int
+  date          DateTime  @db.Date
+  workedMinutes Int       @default(0)
+  lunchMinutes  Int       @default(0)
+  earlyMinutes    Int     @default(0)
+  overtimeMinutes Int     @default(0)
+  firstIn       DateTime?
+  lastOut       DateTime?
+  perZone       Json      @default("{}")
+  flags         String[]  @default([])
+  intervals     Json      @default("[]")
+  manual        Boolean   @default(false)
+  manualReason  String?
+  computedAt    DateTime  @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([date])
+}
+
+model ConditionRule {
+  id      Int           @id @default(autoincrement())
+  type    ConditionType
+  params  Json          @default("{}")
+  enabled Boolean       @default(true)
+  order   Int           @default(0)
+
+  @@index([order])
+}
+
+model Holiday {
+  id   Int      @id @default(autoincrement())
+  date DateTime @unique @db.Date
+  name String
+}
+
+model Leave {
+  id         Int       @id @default(autoincrement())
+  employeeId Int
+  date       DateTime  @db.Date
+  type       LeaveType
+  note       String?
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([date])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model ExportTemplate {
+  id          Int        @id @default(autoincrement())
+  name        String
+  kind        ExportKind
+  layout      Json
+  isDefault   Boolean    @default(false)
+  createdById Int?
+  createdBy   User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model AuditLog {
+  id       Int      @id @default(autoincrement())
+  userId   Int?
+  action   String
+  entity   String
+  entityId String?
+  before   Json?
+  after    Json?
+  at       DateTime @default(now())
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([at])
+}

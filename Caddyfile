@@ -1,0 +1,27 @@
+# TTAH reverse proxy. Single entrypoint; internal TLS (self-signed) for VPN use.
+# Set SITE_ADDRESS in .env to a hostname (e.g. ttah.internal) or :443 for IP access.
+
+{$SITE_ADDRESS} {
+	encode gzip zstd
+
+	# API -> NestJS (path prefix /api is preserved and expected by the API)
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	# Everything else -> Next.js web app
+	handle {
+		reverse_proxy web:3000
+	}
+
+	tls internal
+
+	header {
+		# Security headers (defense in depth; app also sets its own)
+		Strict-Transport-Security "max-age=31536000;"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
