@@ -4,7 +4,9 @@
   "private": true,
   "description": "TTAH backend API (NestJS)",
   "scripts": {
-    "build": "nest build",
+    "build": "tsc -p tsconfig.build.json",
+    "predev": "node -e \"const fs=require('fs');const cp=require('child_process');if(!fs.existsSync('dist/main.js')){try{fs.unlinkSync('tsconfig.build.tsbuildinfo')}catch{};cp.execSync('tsc -p tsconfig.build.json',{stdio:'inherit'})}\"",
+    "dev": "nest start --watch",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",

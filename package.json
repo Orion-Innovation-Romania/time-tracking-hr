@@ -13,7 +13,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "api:dev": "pnpm --filter @ttah/api start:dev",
+    "api:dev": "pnpm --filter @ttah/api dev",
     "web:dev": "pnpm --filter @ttah/web dev",
     "shared:build": "pnpm --filter @ttah/shared build",
     "db:generate": "pnpm --filter @ttah/api prisma:generate",

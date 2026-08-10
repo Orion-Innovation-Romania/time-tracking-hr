@@ -3,6 +3,7 @@ FROM node:22-alpine AS deps
 RUN corepack enable
 WORKDIR /app
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc ./
+COPY tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile
@@ -13,7 +14,8 @@ COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 RUN pnpm --filter @ttah/shared build \
  && pnpm --filter @ttah/api prisma:generate \
- && pnpm --filter @ttah/api build
+ && pnpm --filter @ttah/api build \
+ && /app/node_modules/.bin/tsc -p /app/apps/api/tsconfig.build.json
 
 # ---- runtime ----
 FROM node:22-alpine AS runtime
