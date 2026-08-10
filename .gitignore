@@ -53,3 +53,6 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+
+# Exported local CA (safe to share with clients)
+certs/

@@ -1,5 +1,12 @@
 # TTAH reverse proxy. Single entrypoint; internal TLS (self-signed) for VPN use.
-# Set SITE_ADDRESS in .env to a hostname (e.g. ttah.internal) or :443 for IP access.
+# Set SITE_ADDRESS in .env to the LAN IP or hostname clients use in the browser.
+#
+# When clients connect by raw IP, browsers omit SNI. Inside Docker the TCP
+# destination looks like the container IP (172.x), so default_sni tells Caddy
+# which certificate to serve.
+{
+	default_sni {$SITE_ADDRESS}
+}
 
 {$SITE_ADDRESS} {
 	encode gzip zstd
