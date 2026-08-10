@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+package-lock.json
 
 # Build outputs
 dist/
@@ -8,6 +9,12 @@ build/
 .next/
 out/
 *.tsbuildinfo
+
+# Accidental tsc output in source trees (real build goes to dist/)
+packages/shared/src/**/*.js
+packages/shared/src/**/*.js.map
+apps/api/prisma/seed.js
+apps/api/prisma/seed.js.map
 
 # Prisma
 apps/api/prisma/*.db
