@@ -1,0 +1,215 @@
+
+
+AxTraxNG 27.7.1.18
+Access Report
+
+Print date:
+30/07/2026 16:24:47
+30/06/2026 23:59:59
+From:
+01/06/2026 00:00:00
+To:
+Maria Rosetti 6
+Orion Innovation
+1/5
+DrivenetsDepartment:
+VASILE, VASILEUser Name:
+EventLocationDate
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets04/06/2026 08:59:10
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets04/06/2026 09:01:59
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets04/06/2026 09:02:57
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets04/06/2026 09:25:01
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets04/06/2026 09:25:58
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets04/06/2026 13:03:22
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets04/06/2026 13:03:58
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets04/06/2026 15:40:14
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets05/06/2026 13:21:12
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets05/06/2026 13:25:26
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets05/06/2026 13:26:50
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets05/06/2026 13:39:42
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets05/06/2026 13:40:05
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets05/06/2026 16:02:46
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets05/06/2026 16:03:52
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets05/06/2026 18:49:08
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets12/06/2026 10:04:33
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets12/06/2026 10:06:06
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets12/06/2026 10:07:25
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets12/06/2026 13:00:57
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets12/06/2026 13:01:52
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets12/06/2026 16:42:55
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets12/06/2026 16:43:55
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets12/06/2026 18:11:17
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets12/06/2026 18:12:13
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets12/06/2026 19:18:54
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets15/06/2026 08:12:17
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets15/06/2026 08:13:50
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets15/06/2026 08:14:22
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets15/06/2026 10:40:57
+Access Granted5\Panel 1\Et. 2 Intrare Orion15/06/2026 10:41:41
+
+AxTraxNG 27.7.1.18
+Access Report
+
+Print date:
+30/07/2026 16:24:47
+30/06/2026 23:59:59
+From:
+01/06/2026 00:00:00
+To:
+Maria Rosetti 6
+Orion Innovation
+2/5
+Access Granted5\Panel 1\Et. 2 Intrare Orion15/06/2026 10:41:48
+Access Granted1\Panel 1\Et. 1 Intrare Orion15/06/2026 10:42:18
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets15/06/2026 11:24:40
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets15/06/2026 12:19:34
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets15/06/2026 12:20:01
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets15/06/2026 15:33:43
+Access Granted5\Panel 1\Et. 2 Intrare Orion15/06/2026 16:51:02
+Access Granted5\Panel 1\Et. 2 Iesire Orion15/06/2026 16:51:23
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets15/06/2026 18:07:47
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets16/06/2026 08:17:04
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets16/06/2026 08:18:47
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets16/06/2026 10:02:00
+Access Granted1\Panel 1\Et. 1 Iesire Orion16/06/2026 10:39:47
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets16/06/2026 15:41:00
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets16/06/2026 17:53:16
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets16/06/2026 17:54:15
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets16/06/2026 18:32:14
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets16/06/2026 21:37:00
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets16/06/2026 21:39:20
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets17/06/2026 08:20:26
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets17/06/2026 12:35:59
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets17/06/2026 12:36:31
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets17/06/2026 12:37:29
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets17/06/2026 14:34:14
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets17/06/2026 16:05:37
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets17/06/2026 16:53:13
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets17/06/2026 16:57:24
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets17/06/2026 18:12:58
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets17/06/2026 21:30:37
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets17/06/2026 21:32:43
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets19/06/2026 12:40:16
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets19/06/2026 12:42:13
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets19/06/2026 12:42:59
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets19/06/2026 13:19:30
+
+AxTraxNG 27.7.1.18
+Access Report
+
+Print date:
+30/07/2026 16:24:47
+30/06/2026 23:59:59
+From:
+01/06/2026 00:00:00
+To:
+Maria Rosetti 6
+Orion Innovation
+3/5
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets19/06/2026 16:26:33
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets19/06/2026 16:27:59
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets19/06/2026 18:26:12
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets22/06/2026 09:51:06
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets22/06/2026 09:52:44
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets22/06/2026 14:04:06
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets22/06/2026 14:05:06
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets22/06/2026 16:00:12
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets22/06/2026 16:01:30
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets22/06/2026 18:20:23
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets22/06/2026 18:21:22
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets22/06/2026 18:38:47
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 09:51:18
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets23/06/2026 09:52:54
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 09:53:48
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets23/06/2026 12:54:37
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 12:56:01
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 14:54:14
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets23/06/2026 14:54:59
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 14:56:04
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets23/06/2026 16:05:28
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 16:06:23
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 17:03:27
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets23/06/2026 17:48:33
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 17:52:29
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets23/06/2026 18:18:54
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets23/06/2026 18:19:59
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets24/06/2026 09:51:35
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets24/06/2026 09:52:33
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets24/06/2026 09:53:47
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets24/06/2026 12:45:04
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets24/06/2026 12:45:57
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets24/06/2026 13:57:21
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets24/06/2026 16:24:08
+
+AxTraxNG 27.7.1.18
+Access Report
+
+Print date:
+30/07/2026 16:24:47
+30/06/2026 23:59:59
+From:
+01/06/2026 00:00:00
+To:
+Maria Rosetti 6
+Orion Innovation
+4/5
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets24/06/2026 16:25:12
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets24/06/2026 16:26:01
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets24/06/2026 16:35:23
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets24/06/2026 16:36:15
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets24/06/2026 16:37:08
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets24/06/2026 19:15:02
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 10:02:35
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 10:37:50
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 10:44:09
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 10:44:52
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 10:45:55
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 12:22:41
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 13:06:07
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 13:07:04
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 14:05:15
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 14:06:12
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 14:11:50
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 14:57:56
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 14:58:24
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 16:30:19
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 16:31:14
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 18:48:38
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets25/06/2026 18:49:33
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets25/06/2026 18:52:05
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets26/06/2026 10:26:29
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets26/06/2026 14:16:53
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets26/06/2026 14:17:45
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets26/06/2026 14:19:10
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets26/06/2026 16:38:26
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets26/06/2026 16:39:20
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets26/06/2026 18:49:43
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets26/06/2026 18:50:40
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets26/06/2026 19:21:27
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets30/06/2026 09:39:00
+
+AxTraxNG 27.7.1.18
+Access Report
+
+Print date:
+30/07/2026 16:24:47
+30/06/2026 23:59:59
+From:
+01/06/2026 00:00:00
+To:
+Maria Rosetti 6
+Orion Innovation
+5/5
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets30/06/2026 09:52:22
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets30/06/2026 09:53:15
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets30/06/2026 12:04:51
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets30/06/2026 12:06:13
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets30/06/2026 13:09:21
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets30/06/2026 13:33:23
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets30/06/2026 13:34:06
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets30/06/2026 13:35:32
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets30/06/2026 16:41:51
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets30/06/2026 16:43:18
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets30/06/2026 18:32:04
+Access Granted3\Panel 1\Et. 4 Intrare fata Drivenets30/06/2026 18:32:58
+Access Granted3\Panel 1\Et. 4 Iesire fata Drivenets30/06/2026 18:41:08

@@ -26,8 +26,8 @@ async function ensureTemplate(
 async function main() {
   // Default computation settings (idempotent — never overwrite HR changes).
   await upsertSetting('schedule.global', {
-    startTime: '08:00',
-    endTime: '18:00',
+    startTime: '09:00',
+    endTime: '17:30',
     workingDays: [1, 2, 3, 4, 5],
   });
   await upsertSetting('lunch', {

@@ -51,8 +51,8 @@ export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordSchema>;
 
 // --- config: schedule / lunch / thresholds ---
 export const scheduleConfigSchema = z.object({
-  startTime: timeString.default('08:00'),
-  endTime: timeString.default('18:00'),
+  startTime: timeString.default('09:00'),
+  endTime: timeString.default('17:30'),
   workingDays: z
     .array(z.number().int().min(1).max(7))
     .min(1)
