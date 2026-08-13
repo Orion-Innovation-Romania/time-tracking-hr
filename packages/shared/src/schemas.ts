@@ -203,6 +203,7 @@ export const exportRequestSchema = z.object({
   kind: z.enum(EXPORT_KINDS).default('summary'),
   format: z.enum(EXPORT_FORMATS).default('xlsx'),
   filter: attendanceFilterSchema,
+  sendEmail: z.boolean().optional(),
 });
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
 
@@ -213,3 +214,44 @@ export const importCommitSchema = z.object({
   employeeName: z.string().trim().min(1).max(120).nullable().optional(),
 });
 export type ImportCommitInput = z.infer<typeof importCommitSchema>;
+
+// --- mail (Microsoft Graph sendMail) ---
+const mailEmail = z.string().trim().email().max(254);
+
+/** Split a comma/semicolon-separated recipient list. */
+export function parseMailRecipients(raw: string): string[] {
+  return [...new Set(raw.split(/[,;]+/).map((s) => s.trim()).filter(Boolean))];
+}
+
+export const mailConfigSchema = z.object({
+  authority: z.string().trim().url().max(500),
+  clientId: z.string().trim().min(1).max(80),
+  clientSecret: z.string().trim().max(200).optional(),
+  scope: z.string().trim().min(1).max(200),
+  senderMailbox: mailEmail,
+  fromAddress: mailEmail,
+  fromName: z.string().trim().max(120).default(''),
+  reportRecipient: z
+    .string()
+    .trim()
+    .max(500)
+    .default('')
+    .refine(
+      (value) =>
+        value === '' || parseMailRecipients(value).every((addr) => mailEmail.safeParse(addr).success),
+      { message: 'Use valid email addresses, separated by commas' },
+    ),
+  sendReportByDefault: z.boolean().default(false),
+});
+export type MailConfigInput = z.infer<typeof mailConfigSchema>;
+
+export const sendTestMailSchema = z.object({
+  to: mailEmail,
+  cc: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    mailEmail.optional(),
+  ),
+  subject: z.string().trim().min(1).max(200),
+  body: z.string().trim().min(1).max(10_000),
+});
+export type SendTestMailInput = z.infer<typeof sendTestMailSchema>;

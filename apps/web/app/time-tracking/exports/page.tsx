@@ -10,11 +10,13 @@ import {
   type ExportFormat,
   type ExportKind,
   type ExportTemplateInput,
+  type MailReportPolicy,
   type MetricKey,
 } from '@ttah/shared';
 import { api, apiDownload } from '@/lib/api';
 import { monthRange } from '@/lib/utils';
 import { METRIC_LABELS } from '@/lib/labels';
+import { useEmployees } from '@/lib/hooks';
 import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
@@ -254,6 +256,7 @@ export default function ExportsPage() {
   const [templateId, setTemplateId] = useState<string>('');
   const [kind, setKind] = useState<ExportKind>('summary');
   const [format, setFormat] = useState<ExportFormat>('xlsx');
+  const [employeeId, setEmployeeId] = useState('all');
   const [dialog, setDialog] = useState<{ initial: ExportTemplateInput; id: number | null } | null>(
     null,
   );
@@ -261,6 +264,13 @@ export default function ExportsPage() {
   const templates = useQuery({
     queryKey: ['export-templates'],
     queryFn: () => api<TemplateRecord[]>('/exports/templates'),
+  });
+
+  const employees = useEmployees(true);
+
+  const mailPolicy = useQuery({
+    queryKey: ['mail', 'report-policy'],
+    queryFn: () => api<MailReportPolicy>('/mail/report-policy'),
   });
 
   const generate = useMutation({
@@ -271,11 +281,33 @@ export default function ExportsPage() {
           templateId: templateId ? Number(templateId) : null,
           kind,
           format,
-          filter: { from: range.from, to: range.to },
+          filter: {
+            from: range.from,
+            to: range.to,
+            ...(employeeId !== 'all' ? { employeeIds: [Number(employeeId)] } : {}),
+          },
         },
         `export.${format}`,
       ),
-    onSuccess: () => toast({ title: 'Export downloaded', variant: 'success' }),
+    onSuccess: (result) => {
+      if (result.emailed === 'sent') {
+        toast({
+          title: 'Export downloaded and emailed',
+          description: result.emailTo ? `Sent to ${result.emailTo}` : undefined,
+          variant: 'success',
+        });
+        return;
+      }
+      if (result.emailed === 'failed') {
+        toast({
+          title: 'Export downloaded, email failed',
+          description: result.emailError ?? 'Could not send the report by email.',
+          variant: 'error',
+        });
+        return;
+      }
+      toast({ title: 'Export downloaded', variant: 'success' });
+    },
     onError: () => toast({ title: 'Export failed', variant: 'error' }),
   });
 
@@ -303,7 +335,24 @@ export default function ExportsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <DateRangePicker value={range} onChange={setRange} />
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Employee</Label>
+              <Select value={employeeId} onValueChange={setEmployeeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All employees" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All employees</SelectItem>
+                  {employees.data?.map((employee) => (
+                    <SelectItem key={employee.id} value={String(employee.id)}>
+                      {employee.displayName}
+                      {!employee.active ? ' (inactive)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Template</Label>
               <Select value={templateId} onValueChange={setTemplateId}>
@@ -350,6 +399,11 @@ export default function ExportsPage() {
               </Select>
             </div>
           </div>
+          {mailPolicy.data?.sendByDefault && mailPolicy.data.canSend && (
+            <p className="text-sm text-muted-foreground">
+              A copy will be emailed to {mailPolicy.data.recipient}.
+            </p>
+          )}
           <Button onClick={() => generate.mutate()} disabled={generate.isPending}>
             {generate.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

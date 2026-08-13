@@ -39,6 +39,13 @@ services:
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
       LOGIN_LOCK_MINUTES: ${LOGIN_LOCK_MINUTES:-15}
+      GRAPH_AUTHORITY: ${GRAPH_AUTHORITY:-}
+      GRAPH_CLIENT_ID: ${GRAPH_CLIENT_ID:-}
+      GRAPH_CLIENT_SECRET: ${GRAPH_CLIENT_SECRET:-}
+      GRAPH_SCOPE: ${GRAPH_SCOPE:-https://graph.microsoft.com/.default}
+      MAIL_SENDER_MAILBOX: ${MAIL_SENDER_MAILBOX:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
     volumes:
       - ./config:/app/config
       - uploads:/app/.uploads

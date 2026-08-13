@@ -141,11 +141,18 @@ export async function apiUpload<T = unknown>(
 }
 
 /** Download a binary export and trigger a browser save. */
+export interface DownloadResult {
+  filename: string;
+  emailed: 'sent' | 'skipped' | 'failed' | null;
+  emailTo: string | null;
+  emailError: string | null;
+}
+
 export async function apiDownload(
   path: string,
   body: unknown,
   fallbackName: string,
-): Promise<void> {
+): Promise<DownloadResult> {
   const res = await request(buildUrl(path), {
     method: 'POST',
     credentials: 'include',
@@ -159,6 +166,10 @@ export async function apiDownload(
   const disposition = res.headers.get('content-disposition') ?? '';
   const match = /filename="?([^"]+)"?/.exec(disposition);
   const name = match?.[1] ?? fallbackName;
+  const emailedRaw = res.headers.get('x-ttah-emailed');
+  const emailed =
+    emailedRaw === 'sent' || emailedRaw === 'skipped' || emailedRaw === 'failed' ? emailedRaw : null;
+  const emailErrorHeader = res.headers.get('x-ttah-email-error');
 
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -168,4 +179,11 @@ export async function apiDownload(
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+
+  return {
+    filename: name,
+    emailed,
+    emailTo: res.headers.get('x-ttah-email-to'),
+    emailError: emailErrorHeader ? decodeURIComponent(emailErrorHeader) : null,
+  };
 }

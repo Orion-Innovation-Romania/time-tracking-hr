@@ -357,8 +357,12 @@ export class AttendanceService {
     const to = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
     const cfg = await this.loadConfig();
-    const employeeWhere: Prisma.EmployeeWhereInput = { active: true };
-    if (filter?.employeeIds?.length) employeeWhere.id = { in: filter.employeeIds };
+    const employeeWhere: Prisma.EmployeeWhereInput = {};
+    if (filter?.employeeIds?.length) {
+      employeeWhere.id = { in: filter.employeeIds };
+    } else {
+      employeeWhere.active = true;
+    }
     if (filter?.departments?.length) {
       employeeWhere.departments = { some: { department: { in: filter.departments } } };
     }

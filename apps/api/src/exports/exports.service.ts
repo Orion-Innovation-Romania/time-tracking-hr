@@ -28,6 +28,7 @@ export interface GeneratedFile {
   filename: string;
   buffer: Buffer;
   contentType: string;
+  scopeLabel: string;
 }
 
 @Injectable()
@@ -100,24 +101,50 @@ export class ExportsService {
       await this.buildSummary(workbook, request, layout);
     }
 
-    const base = `ttah-${request.kind}-${request.filter.from}_${request.filter.to}`;
+    const scope = await this.resolveScope(request.filter.employeeIds);
+    const base = [
+      'ttah',
+      request.kind,
+      scope.slug,
+      `${request.filter.from}_${request.filter.to}`,
+    ]
+      .filter(Boolean)
+      .join('-');
     await this.audit.log({
       userId: actorId ?? null,
       action: 'export',
       entity: 'Attendance',
-      after: { kind: request.kind, format: request.format, filter: request.filter },
+      after: {
+        kind: request.kind,
+        format: request.format,
+        filter: request.filter,
+        sendEmail: request.sendEmail ?? null,
+      },
     });
 
     if (request.format === 'csv') {
       const buffer = (await workbook.csv.writeBuffer()) as unknown as Buffer;
-      return { filename: `${base}.csv`, buffer, contentType: 'text/csv; charset=utf-8' };
+      return { filename: `${base}.csv`, buffer, contentType: 'text/csv; charset=utf-8', scopeLabel: scope.label };
     }
     const buffer = (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
     return {
       filename: `${base}.xlsx`,
       buffer,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      scopeLabel: scope.label,
     };
+  }
+
+  private async resolveScope(employeeIds?: number[]): Promise<{ label: string; slug: string }> {
+    if (!employeeIds?.length) {
+      return { label: 'all employees', slug: '' };
+    }
+    if (employeeIds.length === 1) {
+      const employee = await this.prisma.employee.findUnique({ where: { id: employeeIds[0] } });
+      const name = employee?.displayName?.trim() || `employee-${employeeIds[0]}`;
+      return { label: name, slug: slugFilename(name) };
+    }
+    return { label: `${employeeIds.length} employees`, slug: `${employeeIds.length}-employees` };
   }
 
   private async resolveLayout(request: ExportRequest): Promise<ExportTemplateLayout> {
@@ -271,4 +298,15 @@ function ymOf(dateStr: string): { year: number; month: number } {
 
 function range(start: number, end: number): number[] {
   return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+}
+
+function slugFilename(name: string): string {
+  const slug = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .toLowerCase();
+  return slug || 'employee';
 }

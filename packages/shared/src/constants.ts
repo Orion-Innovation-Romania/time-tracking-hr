@@ -12,6 +12,7 @@ export const SETTING_KEYS = {
   THRESHOLDS: 'thresholds',
   RETENTION_MONTHS: 'retention.months',
   TIMEZONE: 'timezone',
+  MAIL: 'mail.graph',
 } as const;
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
 

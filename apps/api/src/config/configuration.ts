@@ -5,6 +5,16 @@ export interface JwtConfig {
   refreshTtl: number;
 }
 
+export interface MailGraphEnvConfig {
+  authority: string;
+  clientId: string;
+  clientSecret: string;
+  scope: string;
+  senderMailbox: string;
+  fromAddress: string;
+  fromName: string;
+}
+
 export interface AppConfiguration {
   port: number;
   tz: string;
@@ -14,6 +24,7 @@ export interface AppConfiguration {
   usersConfigPath: string;
   uploadTmpDir: string;
   retentionMonths: number;
+  mail: MailGraphEnvConfig;
 }
 
 export default (): AppConfiguration => ({
@@ -33,4 +44,15 @@ export default (): AppConfiguration => ({
   usersConfigPath: process.env.USERS_CONFIG_PATH ?? './config/users.yml',
   uploadTmpDir: process.env.UPLOAD_TMP_DIR ?? './.uploads',
   retentionMonths: parseInt(process.env.DATA_RETENTION_MONTHS ?? '24', 10),
+  mail: {
+    authority:
+      process.env.GRAPH_AUTHORITY ||
+      'https://login.microsoftonline.com/adbbbd82-76e5-4952-8531-3cc59f3c1fdd/',
+    clientId: process.env.GRAPH_CLIENT_ID || 'b903c612-e24c-4dfa-a9d2-5e907f492460',
+    clientSecret: process.env.GRAPH_CLIENT_SECRET || '',
+    scope: process.env.GRAPH_SCOPE || 'https://graph.microsoft.com/.default',
+    senderMailbox: process.env.MAIL_SENDER_MAILBOX || 'dpd-rou.inventory-smb@orioninc.com',
+    fromAddress: process.env.MAIL_FROM_ADDRESS || 'dpd-rou.inventory.no-reply@orioninc.com',
+    fromName: process.env.MAIL_FROM_NAME || 'DPD-ROU-Hr-Recruitment',
+  },
 });

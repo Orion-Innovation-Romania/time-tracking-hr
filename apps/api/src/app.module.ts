@@ -13,6 +13,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { ImportsModule } from './imports/imports.module';
 import { ExportsModule } from './exports/exports.module';
 import { HealthModule } from './health/health.module';
+import { MailModule } from './mail/mail.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PasswordPolicyGuard } from './common/guards/password-policy.guard';
@@ -31,6 +32,7 @@ import { PasswordPolicyGuard } from './common/guards/password-policy.guard';
     ImportsModule,
     ExportsModule,
     HealthModule,
+    MailModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -4,10 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import type { EmployeeView } from '@ttah/shared';
 import { api } from './api';
 
-export function useEmployees() {
+export function useEmployees(includeInactive = false) {
   return useQuery<EmployeeView[]>({
-    queryKey: ['employees'],
-    queryFn: () => api<EmployeeView[]>('/employees'),
+    queryKey: ['employees', { includeInactive }],
+    queryFn: () =>
+      api<EmployeeView[]>('/employees', {
+        query: includeInactive ? { includeInactive: 'true' } : undefined,
+      }),
   });
 }
 

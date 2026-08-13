@@ -226,3 +226,33 @@ export interface ApiError {
   message: string | string[];
   error?: string;
 }
+
+/** Public mail settings (client secret is never returned). */
+export interface MailConfigView {
+  authority: string;
+  clientId: string;
+  scope: string;
+  senderMailbox: string;
+  fromAddress: string;
+  fromName: string;
+  reportRecipient: string;
+  sendReportByDefault: boolean;
+  hasClientSecret: boolean;
+  configured: boolean;
+}
+
+/** Policy visible to any signed-in user (no Graph secrets). */
+export interface MailReportPolicy {
+  sendByDefault: boolean;
+  recipient: string;
+  canSend: boolean;
+}
+
+export interface MailVerifyResult {
+  ok: true;
+  expiresIn: number;
+}
+
+export interface MailSendResult {
+  ok: true;
+}

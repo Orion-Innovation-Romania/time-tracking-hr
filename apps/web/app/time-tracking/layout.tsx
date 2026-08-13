@@ -10,6 +10,7 @@ import {
   Home,
   KeyRound,
   LogOut,
+  Mail,
   ScrollText,
   Settings,
   TriangleAlert,
@@ -33,7 +34,10 @@ const NAV = [
   { href: '/time-tracking/config', label: 'Configuration', icon: Settings },
 ];
 
-const ADMIN_NAV = [{ href: '/time-tracking/users', label: 'Users', icon: KeyRound }];
+const ADMIN_NAV = [
+  { href: '/time-tracking/users', label: 'Users', icon: KeyRound },
+  { href: '/time-tracking/mail', label: 'Mail', icon: Mail },
+];
 
 export default function TimeTrackingLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
