@@ -1,28 +1,15 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { load } from 'js-yaml';
 import type { Role } from '@ttah/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsersFileService } from './users-file.service';
 import { UsersService } from './users.service';
 
-interface ConfiguredUser {
-  username: string;
-  role?: Role;
-  initialPassword: string;
-}
-
-interface UsersFile {
-  users?: ConfiguredUser[];
-}
-
 /**
- * Reconciles the DB users with config/users.yml at boot:
- *  - new entries are created and forced to change password on first login;
- *  - existing users keep their chosen password (only role/active refreshed;
- *    initial-password hash updated if the file value changed);
- *  - users removed from the file are deactivated.
+ * Reconciles config/users.yml with the DB at boot:
+ *  - new YAML entries are created and forced to change password;
+ *  - existing YAML users keep their chosen password (profile/role/active refresh);
+ *  - YAML `active: false` or missing usernames are deactivated.
  */
 @Injectable()
 export class UserSyncService implements OnApplicationBootstrap {
@@ -31,7 +18,7 @@ export class UserSyncService implements OnApplicationBootstrap {
   constructor(
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
-    private readonly config: ConfigService,
+    private readonly file: UsersFileService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -43,33 +30,36 @@ export class UserSyncService implements OnApplicationBootstrap {
   }
 
   async sync(): Promise<void> {
-    const path = this.config.get<string>('usersConfigPath') ?? './config/users.yml';
-    const abs = resolve(path);
+    const abs = this.file.absolutePath();
     if (!existsSync(abs)) {
       this.logger.warn(`users config not found at ${abs}; skipping sync`);
       return;
     }
 
-    const doc = (load(readFileSync(abs, 'utf8')) as UsersFile) ?? {};
-    const entries = doc.users ?? [];
+    const entries = this.file.read();
     const configured = new Set<string>();
 
     for (const entry of entries) {
-      if (!entry?.username || !entry?.initialPassword) continue;
       configured.add(entry.username);
       const role: Role = entry.role === 'admin' ? 'admin' : 'user';
+      const wantActive = entry.active !== false;
       const existing = await this.users.findByUsername(entry.username);
 
       if (!existing) {
+        if (!wantActive) continue;
         const initialHash = await this.users.hash(entry.initialPassword);
         await this.prisma.user.create({
           data: {
             username: entry.username,
+            firstName: entry.firstName?.trim() || null,
+            lastName: entry.lastName?.trim() || null,
+            email: entry.email?.trim().toLowerCase() || null,
             role,
             passwordHash: initialHash,
             initialPasswordHash: initialHash,
             mustChangePassword: true,
             isActive: true,
+            managedByConfig: true,
           },
         });
         this.logger.log(`Created user ${entry.username} (${role})`);
@@ -84,7 +74,11 @@ export class UserSyncService implements OnApplicationBootstrap {
         where: { id: existing.id },
         data: {
           role,
-          isActive: true,
+          isActive: wantActive,
+          managedByConfig: true,
+          ...(entry.firstName ? { firstName: entry.firstName.trim() } : {}),
+          ...(entry.lastName ? { lastName: entry.lastName.trim() } : {}),
+          ...(entry.email ? { email: entry.email.trim().toLowerCase() } : {}),
           ...(initialChanged
             ? { initialPasswordHash: await this.users.hash(entry.initialPassword) }
             : {}),
@@ -92,7 +86,9 @@ export class UserSyncService implements OnApplicationBootstrap {
       });
     }
 
-    const dbUsers = await this.prisma.user.findMany();
+    const dbUsers = await this.prisma.user.findMany({
+      where: { managedByConfig: true },
+    });
     for (const user of dbUsers) {
       if (!configured.has(user.username) && user.isActive) {
         await this.prisma.user.update({

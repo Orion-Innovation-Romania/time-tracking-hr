@@ -8,6 +8,23 @@ export interface SessionUser {
   mustChangePassword: boolean;
 }
 
+export interface UserAccountView {
+  id: number;
+  username: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  role: Role;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  managedByConfig: boolean;
+  passwordResetRequestedAt: string | null;
+  lastLoginAt: string | null;
+  lockedUntil: string | null;
+  failedAttempts: number;
+  createdAt: string;
+}
+
 export interface EmployeeView {
   id: number;
   canonicalName: string;

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { OrionMark, OrionLogo, OI_TAGLINE } from '@/components/brand';
 import { useLogout, useSession } from '@/lib/session';
+import { ServiceUnavailable } from '@/components/service-unavailable';
 
 interface AppCard {
   href: string;
@@ -39,13 +40,17 @@ const APPS: AppCard[] = [
 
 export default function PortalPage() {
   const router = useRouter();
-  const { data: session, isLoading } = useSession();
+  const { data: session, isLoading, isError, error, refetch, isFetching } = useSession();
   const logout = useLogout();
 
   useEffect(() => {
-    if (!isLoading && session === null) router.replace('/login');
+    if (!isLoading && !isError && session === null) router.replace('/login');
     if (session?.mustChangePassword) router.replace('/change-password');
-  }, [session, isLoading, router]);
+  }, [session, isLoading, isError, router]);
+
+  if (isError) {
+    return <ServiceUnavailable error={error} onRetry={() => refetch()} retrying={isFetching} />;
+  }
 
   if (isLoading || !session) {
     return (

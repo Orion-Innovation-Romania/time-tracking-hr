@@ -8,6 +8,7 @@ import {
   DoorOpen,
   FileSpreadsheet,
   Home,
+  KeyRound,
   LogOut,
   ScrollText,
   Settings,
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { useLogout, useSession } from '@/lib/session';
 import { OrionMark } from '@/components/brand';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ServiceUnavailable } from '@/components/service-unavailable';
 
 const NAV = [
   { href: '/time-tracking/dashboard', label: 'Dashboard', icon: BarChart3 },
@@ -31,16 +33,22 @@ const NAV = [
   { href: '/time-tracking/config', label: 'Configuration', icon: Settings },
 ];
 
+const ADMIN_NAV = [{ href: '/time-tracking/users', label: 'Users', icon: KeyRound }];
+
 export default function TimeTrackingLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { data: session, isLoading } = useSession();
+  const { data: session, isLoading, isError, error, refetch, isFetching } = useSession();
   const logout = useLogout();
 
   useEffect(() => {
-    if (!isLoading && session === null) router.replace('/login');
+    if (!isLoading && !isError && session === null) router.replace('/login');
     if (session?.mustChangePassword) router.replace('/change-password');
-  }, [session, isLoading, router]);
+  }, [session, isLoading, isError, router]);
+
+  if (isError) {
+    return <ServiceUnavailable error={error} onRetry={() => refetch()} retrying={isFetching} />;
+  }
 
   if (isLoading || !session) {
     return (
@@ -89,6 +97,28 @@ export default function TimeTrackingLayout({ children }: { children: ReactNode }
               </Link>
             );
           })}
+          {session.role === 'admin' && (
+            <>
+              <div className="my-2 h-px bg-border" />
+              {ADMIN_NAV.map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" /> {item.label}
+                  </Link>
+                );
+              })}
+            </>
+          )}
         </nav>
 
         <div className="border-t p-3">

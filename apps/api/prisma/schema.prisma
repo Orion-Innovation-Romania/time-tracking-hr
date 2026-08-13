@@ -58,18 +58,26 @@ enum ConditionType {
 }
 
 model User {
-  id                  Int       @id @default(autoincrement())
-  username            String    @unique
-  role                Role      @default(user)
-  passwordHash        String
-  initialPasswordHash String
-  mustChangePassword  Boolean   @default(true)
-  isActive            Boolean   @default(true)
-  failedAttempts      Int       @default(0)
-  lockedUntil         DateTime?
-  lastLoginAt         DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                        Int       @id @default(autoincrement())
+  username                  String    @unique
+  firstName                 String?
+  lastName                  String?
+  email                     String?   @unique
+  role                      Role      @default(user)
+  passwordHash              String
+  initialPasswordHash       String
+  mustChangePassword        Boolean   @default(true)
+  isActive                  Boolean   @default(true)
+  /// True for accounts seeded/updated from config/users.yml. Admin-created users are false
+  /// so YAML sync does not deactivate them on restart.
+  managedByConfig           Boolean   @default(false)
+  /// Set when the user requests a password reset from the login page; cleared on admin reset.
+  passwordResetRequestedAt  DateTime?
+  failedAttempts            Int       @default(0)
+  lockedUntil               DateTime?
+  lastLoginAt               DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   logins          LoginHistory[]
   imports         ImportBatch[]

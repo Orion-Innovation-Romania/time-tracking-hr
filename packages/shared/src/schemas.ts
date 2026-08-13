@@ -49,6 +49,39 @@ export const adminResetPasswordSchema = z.object({
 });
 export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordSchema>;
 
+export const forgotPasswordSchema = z.object({
+  username: z.string().min(1).max(64),
+});
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+const usernameSchema = z
+  .string()
+  .min(2)
+  .max(64)
+  .regex(/^[a-zA-Z0-9._-]+$/, 'Use letters, digits, ., _ or -');
+
+const nameSchema = z.string().trim().min(1).max(80);
+
+export const createUserSchema = z.object({
+  username: usernameSchema,
+  firstName: nameSchema,
+  lastName: nameSchema,
+  email: z.string().trim().email().max(254),
+  role: z.enum(ROLES).default('user'),
+  initialPassword: passwordSchema,
+});
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+
+export const updateUserSchema = z.object({
+  firstName: nameSchema.optional(),
+  lastName: nameSchema.optional(),
+  email: z.string().trim().email().max(254).optional(),
+  role: z.enum(ROLES).optional(),
+  isActive: z.boolean().optional(),
+  initialPassword: passwordSchema.optional(),
+});
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
 // --- config: schedule / lunch / thresholds ---
 export const scheduleConfigSchema = z.object({
   startTime: timeString.default('09:00'),

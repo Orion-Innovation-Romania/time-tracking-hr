@@ -40,7 +40,7 @@ services:
       LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
       LOGIN_LOCK_MINUTES: ${LOGIN_LOCK_MINUTES:-15}
     volumes:
-      - ./config:/app/config:ro
+      - ./config:/app/config
       - uploads:/app/.uploads
     depends_on:
       postgres:

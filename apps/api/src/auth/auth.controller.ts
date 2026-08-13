@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpException,
+  HttpStatus,
   Post,
   Req,
   Res,
@@ -11,8 +13,10 @@ import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
   loginSchema,
   type ChangePasswordInput,
+  type ForgotPasswordInput,
   type LoginInput,
   type SessionUser,
 } from '@ttah/shared';
@@ -21,6 +25,8 @@ import { AllowWhenMustChange } from '../common/decorators/allow-password-change.
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { JwtConfig } from '../config/configuration';
+import { UsersService } from '../users/users.service';
+import { MemoryRateLimit } from '../common/memory-rate-limit';
 import { AuthService } from './auth.service';
 import {
   REFRESH_COOKIE,
@@ -30,8 +36,13 @@ import {
 
 @Controller('auth')
 export class AuthController {
+  /** 5 attempts / 15 min per IP, 3 / 15 min per username. */
+  private readonly forgotByIp = new MemoryRateLimit(5, 15 * 60 * 1000);
+  private readonly forgotByUser = new MemoryRateLimit(3, 15 * 60 * 1000);
+
   constructor(
     private readonly auth: AuthService,
+    private readonly users: UsersService,
     private readonly config: ConfigService,
   ) {}
 
@@ -58,6 +69,23 @@ export class AuthController {
     const tokens = await this.auth.issueTokens(user);
     setAuthCookies(res, tokens, this.cookieOpts());
     return this.auth.toSessionUser(user);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  async forgotPassword(
+    @Body(new ZodValidationPipe(forgotPasswordSchema)) body: ForgotPasswordInput,
+    @Req() req: Request,
+  ): Promise<{ ok: true }> {
+    const ip = req.ip ?? 'unknown';
+    const userKey = body.username.trim().toLowerCase();
+    if (!this.forgotByIp.try(`ip:${ip}`) || !this.forgotByUser.try(`user:${userKey}`)) {
+      throw new HttpException(
+        'Too many reset requests. Try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    return this.users.requestPasswordReset(body.username);
   }
 
   @Public()
@@ -94,7 +122,6 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<SessionUser> {
     await this.auth.changePassword(user.id, body.currentPassword, body.newPassword);
-    // Reissue tokens and refresh session state (mustChangePassword now false).
     const updated = { ...user, mustChangePassword: false };
     const tokens = await this.auth.issueTokens(updated);
     setAuthCookies(res, tokens, this.cookieOpts());

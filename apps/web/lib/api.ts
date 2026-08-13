@@ -15,6 +15,28 @@ export class ApiRequestError extends Error {
   }
 }
 
+const UNAVAILABLE_MESSAGE =
+  'Cannot reach the server. The API or database may be down.';
+
+export function isServiceUnavailable(err: unknown): boolean {
+  if (err instanceof ApiRequestError) {
+    if (err.statusCode === 0 || err.statusCode >= 500) return true;
+    return /ECONNREFUSED|Failed to proxy|Can't reach database|P1001/i.test(err.message);
+  }
+  if (err instanceof TypeError) return true;
+  if (err instanceof Error) {
+    return /ECONNREFUSED|Failed to proxy|network|fetch/i.test(err.message);
+  }
+  return false;
+}
+
+export function unavailableMessage(err?: unknown): string {
+  if (err instanceof ApiRequestError && /Can't reach database|P1001/i.test(err.message)) {
+    return 'Cannot connect to the database. Please try again in a moment.';
+  }
+  return UNAVAILABLE_MESSAGE;
+}
+
 // Same-origin: '/api' is served by Caddy (prod) or Next rewrite (dev).
 const BASE = '/api';
 
@@ -50,12 +72,41 @@ async function parseError(res: Response): Promise<ApiFailure> {
   }
 }
 
+/** Login/forgot/refresh 401s are expected (bad password, no cookie). Everything else means the session is dead. */
+const PUBLIC_AUTH_PATHS = new Set(['/auth/login', '/auth/forgot-password', '/auth/refresh']);
+
+function sendToLoginIfUnauthorized(path: string, statusCode: number) {
+  if (statusCode !== 401) return;
+  if (PUBLIC_AUTH_PATHS.has(path.split('?')[0])) return;
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === '/login') return;
+  window.location.replace('/login');
+}
+
+async function fail(res: Response, path: string): Promise<never> {
+  const failure = await parseError(res);
+  sendToLoginIfUnauthorized(path, failure.statusCode);
+  throw new ApiRequestError(failure);
+}
+
+async function request(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    throw new ApiRequestError({
+      statusCode: 0,
+      message: UNAVAILABLE_MESSAGE,
+      raw: err,
+    });
+  }
+}
+
 export async function api<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
   const { method = 'GET', body, query, signal } = options;
-  const res = await fetch(buildUrl(path, query), {
+  const res = await request(buildUrl(path, query), {
     method,
     credentials: 'include',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -64,9 +115,7 @@ export async function api<T = unknown>(
     cache: 'no-store',
   });
 
-  if (!res.ok) {
-    throw new ApiRequestError(await parseError(res));
-  }
+  if (!res.ok) await fail(res, path);
 
   if (res.status === 204) return undefined as T;
   const contentType = res.headers.get('content-type') ?? '';
@@ -81,13 +130,13 @@ export async function apiUpload<T = unknown>(
   path: string,
   form: FormData,
 ): Promise<T> {
-  const res = await fetch(buildUrl(path), {
+  const res = await request(buildUrl(path), {
     method: 'POST',
     credentials: 'include',
     body: form,
     cache: 'no-store',
   });
-  if (!res.ok) throw new ApiRequestError(await parseError(res));
+  if (!res.ok) await fail(res, path);
   return (await res.json()) as T;
 }
 
@@ -97,14 +146,14 @@ export async function apiDownload(
   body: unknown,
   fallbackName: string,
 ): Promise<void> {
-  const res = await fetch(buildUrl(path), {
+  const res = await request(buildUrl(path), {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     cache: 'no-store',
   });
-  if (!res.ok) throw new ApiRequestError(await parseError(res));
+  if (!res.ok) await fail(res, path);
 
   const blob = await res.blob();
   const disposition = res.headers.get('content-disposition') ?? '';

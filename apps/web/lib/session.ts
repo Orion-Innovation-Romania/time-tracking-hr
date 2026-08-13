@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 import type { SessionUser } from '@ttah/shared';
-import { api, ApiRequestError } from './api';
+import { api, ApiRequestError, isServiceUnavailable } from './api';
 
 export function useSession() {
   return useQuery<SessionUser | null>({
@@ -18,6 +18,7 @@ export function useSession() {
       }
     },
     staleTime: 60_000,
+    retry: (count, err) => isServiceUnavailable(err) && count < 2,
   });
 }
 

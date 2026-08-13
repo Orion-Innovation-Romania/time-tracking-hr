@@ -1,34 +1,50 @@
 # ============================================================================
-# TTAH user accounts - SOURCE OF TRUTH for who may log in.
+# TTAH user accounts - bootstrap SOURCE for first deploy (synced on API start).
 # ----------------------------------------------------------------------------
 # On API startup these entries are synced into the database:
 #   * A new username here is created with its initialPassword and is forced to
 #     change it at first login.
 #   * An existing user keeps the password they chose; only role/active sync.
-#   * Removing a user here DEACTIVATES the account (login blocked); data is kept.
-#   * "Reset password" (admin) reverts a user to the initialPassword below and
+#   * Removing a user HERE deactivates that config-managed account (data kept).
+#   * Accounts created in Admin → Users are NOT removed by this file.
+#   * "Reset password" (admin) reverts a user to the initialPassword and
 #     forces a change at next login.
 #
-# You cannot log in unless you are listed here. Change these passwords before
-# the first deployment. Strong passwords recommended (>= 10 chars, mixed).
+# Prefer creating day-to-day HR accounts from Admin → Users in the UI.
+# Strong passwords recommended (>= 10 chars, mixed).
 # ============================================================================
 users:
   - username: admin
     role: admin
+    firstName: Admin
+    lastName: TTAH
+    email: admin@localhost
     initialPassword: "Admin#Initial1"
 
   - username: hr1
     role: user
+    firstName: HR
+    lastName: One
+    email: hr1@localhost
     initialPassword: "Hr1#Initial1"
 
   - username: hr2
     role: user
+    firstName: HR
+    lastName: Two
+    email: hr2@localhost
     initialPassword: "Hr2#Initial1"
 
   - username: hr3
     role: user
+    firstName: HR
+    lastName: Three
+    email: hr3@localhost
     initialPassword: "Hr3#Initial1"
 
   - username: hr4
     role: user
+    firstName: HR
+    lastName: Four
+    email: hr4@localhost
     initialPassword: "Hr4#Initial1"
