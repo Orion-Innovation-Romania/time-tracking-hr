@@ -2,18 +2,19 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Download, FileSpreadsheet, Loader2, Plus, Star, Trash2 } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Plus, Star, Trash2, TriangleAlert } from 'lucide-react';
 import {
   EXPORT_FORMATS,
   EXPORT_KINDS,
   METRIC_KEYS,
+  type ExportAvailability,
   type ExportFormat,
   type ExportKind,
   type ExportTemplateInput,
   type MailReportPolicy,
   type MetricKey,
 } from '@ttah/shared';
-import { api, apiDownload } from '@/lib/api';
+import { api, apiDownload, ApiRequestError } from '@/lib/api';
 import { monthRange } from '@/lib/utils';
 import { METRIC_LABELS } from '@/lib/labels';
 import { useEmployees } from '@/lib/hooks';
@@ -273,6 +274,25 @@ export default function ExportsPage() {
     queryFn: () => api<MailReportPolicy>('/mail/report-policy'),
   });
 
+  const exportFilter = {
+    from: range.from,
+    to: range.to,
+    ...(employeeId !== 'all' ? { employeeIds: [Number(employeeId)] } : {}),
+  };
+
+  const availability = useQuery({
+    queryKey: ['export-availability', exportFilter],
+    queryFn: () =>
+      api<ExportAvailability>('/exports/availability', {
+        method: 'POST',
+        body: { filter: exportFilter },
+      }),
+    enabled: Boolean(range.from && range.to),
+  });
+
+  const noData = availability.data?.hasData === false;
+  const exportBlocked = noData || availability.isFetching;
+
   const generate = useMutation({
     mutationFn: () =>
       apiDownload(
@@ -281,11 +301,7 @@ export default function ExportsPage() {
           templateId: templateId ? Number(templateId) : null,
           kind,
           format,
-          filter: {
-            from: range.from,
-            to: range.to,
-            ...(employeeId !== 'all' ? { employeeIds: [Number(employeeId)] } : {}),
-          },
+          filter: exportFilter,
         },
         `export.${format}`,
       ),
@@ -308,7 +324,12 @@ export default function ExportsPage() {
       }
       toast({ title: 'Export downloaded', variant: 'success' });
     },
-    onError: () => toast({ title: 'Export failed', variant: 'error' }),
+    onError: (err) =>
+      toast({
+        title: 'Export failed',
+        description: err instanceof ApiRequestError ? err.message : 'Unknown error',
+        variant: 'error',
+      }),
   });
 
   const remove = useMutation({
@@ -399,19 +420,33 @@ export default function ExportsPage() {
               </Select>
             </div>
           </div>
-          {mailPolicy.data?.sendByDefault && mailPolicy.data.canSend && (
+          {noData && (
+            <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              <TriangleAlert className="h-4 w-4 shrink-0" />
+              No data in this interval.
+            </div>
+          )}
+          {mailPolicy.data?.sendByDefault && mailPolicy.data.canSend && !noData && (
             <p className="text-sm text-muted-foreground">
               A copy will be emailed to {mailPolicy.data.recipient}.
             </p>
           )}
-          <Button onClick={() => generate.mutate()} disabled={generate.isPending}>
-            {generate.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Download export
-          </Button>
+          <span
+            className="inline-flex"
+            title={noData ? 'No data in this interval' : undefined}
+          >
+            <Button
+              onClick={() => generate.mutate()}
+              disabled={generate.isPending || exportBlocked}
+            >
+              {generate.isPending || availability.isFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Download export
+            </Button>
+          </span>
         </CardContent>
       </Card>
 

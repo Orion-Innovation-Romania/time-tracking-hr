@@ -12,8 +12,10 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
+  exportAvailabilitySchema,
   exportRequestSchema,
   exportTemplateSchema,
+  type ExportAvailabilityInput,
   type ExportRequest,
   type ExportTemplateInput,
   type SessionUser,
@@ -57,6 +59,11 @@ export class ExportsController {
   @Delete('templates/:id')
   deleteTemplate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: SessionUser) {
     return this.exports.deleteTemplate(id, user.id);
+  }
+
+  @Post('availability')
+  availability(@Body(new ZodValidationPipe(exportAvailabilitySchema)) body: ExportAvailabilityInput) {
+    return this.exports.availability(body.filter);
   }
 
   @Post('generate')

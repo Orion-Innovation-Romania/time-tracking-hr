@@ -89,6 +89,8 @@ export interface GeneratedExportMail {
 
 /** Graph simple-attachment limit is 3 MB. */
 const MAX_SIMPLE_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+const SEND_MAX_ATTEMPTS = 4;
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
 export function mailErrorMessage(err: unknown): string {
   if (err instanceof HttpException) {
@@ -240,7 +242,6 @@ export class MailService {
       throw new BadRequestException('At least one recipient is required');
     }
 
-    const { token } = await this.acquireToken(cfg);
     const fromEmail: GraphEmailAddress = { address: cfg.fromAddress };
     if (cfg.fromName) fromEmail.name = cfg.fromName;
 
@@ -280,20 +281,74 @@ export class MailService {
     }
 
     const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(cfg.senderMailbox)}/sendMail`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    const body = JSON.stringify(payload);
+    let lastMessage = 'Graph sendMail failed';
+    let waitMs = 0;
 
-    if (!res.ok) {
-      const message = await this.readGraphError(res, 'Graph sendMail failed');
-      this.logger.error(message);
-      throw new BadRequestException(message);
+    for (let attempt = 0; attempt < SEND_MAX_ATTEMPTS; attempt++) {
+      if (waitMs > 0) await this.sleep(waitMs);
+
+      const { token } = await this.acquireToken(cfg);
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body,
+        });
+      } catch (err) {
+        lastMessage = err instanceof Error ? err.message : 'Cannot reach Microsoft Graph';
+        this.logger.warn(
+          `Graph sendMail network error (attempt ${attempt + 1}/${SEND_MAX_ATTEMPTS}): ${lastMessage}`,
+        );
+        if (attempt === SEND_MAX_ATTEMPTS - 1) {
+          throw new ServiceUnavailableException(lastMessage);
+        }
+        waitMs = this.retryDelayMs(attempt);
+        continue;
+      }
+
+      if (res.status === 202 || res.status === 200) {
+        if (attempt > 0) {
+          this.logger.log(`Graph sendMail succeeded on attempt ${attempt + 1}`);
+        }
+        return;
+      }
+
+      lastMessage = await this.readGraphError(res, 'Graph sendMail failed');
+      const retryable = res.status === 401 || RETRYABLE_STATUS.has(res.status);
+      if (res.status === 401) this.cachedToken = null;
+
+      if (!retryable || attempt === SEND_MAX_ATTEMPTS - 1) {
+        this.logger.error(lastMessage);
+        throw new BadRequestException(lastMessage);
+      }
+
+      this.logger.warn(
+        `Graph sendMail ${res.status} (attempt ${attempt + 1}/${SEND_MAX_ATTEMPTS}): ${lastMessage}`,
+      );
+      waitMs = this.retryAfterMs(res.headers.get('retry-after')) ?? this.retryDelayMs(attempt);
     }
+
+    throw new BadRequestException(lastMessage);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private retryDelayMs(failedAttempt: number): number {
+    return Math.min(500 * 2 ** failedAttempt, 8_000);
+  }
+
+  private retryAfterMs(header: string | null): number | null {
+    if (!header) return null;
+    const seconds = Number(header);
+    if (!Number.isFinite(seconds) || seconds < 0) return null;
+    return Math.min(seconds * 1000, 15_000);
   }
 
   private async acquireToken(

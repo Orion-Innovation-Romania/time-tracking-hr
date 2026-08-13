@@ -210,6 +210,10 @@ export class AttendanceService {
     return rows.map((row) => this.toSummaryView(row));
   }
 
+  countSummaries(filter: AttendanceFilter): Promise<number> {
+    return this.prisma.dailySummary.count({ where: this.buildWhere(filter) });
+  }
+
   async getDayDetail(employeeId: number, key: string): Promise<DailySummaryView | null> {
     const row = await this.prisma.dailySummary.findUnique({
       where: { employeeId_date: { employeeId, date: dateOnly(key) } },

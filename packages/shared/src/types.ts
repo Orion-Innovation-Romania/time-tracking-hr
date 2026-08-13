@@ -256,3 +256,7 @@ export interface MailVerifyResult {
 export interface MailSendResult {
   ok: true;
 }
+
+export interface ExportAvailability {
+  hasData: boolean;
+}

@@ -207,6 +207,11 @@ export const exportRequestSchema = z.object({
 });
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
 
+export const exportAvailabilitySchema = z.object({
+  filter: attendanceFilterSchema,
+});
+export type ExportAvailabilityInput = z.infer<typeof exportAvailabilitySchema>;
+
 // --- import commit ---
 export const importCommitSchema = z.object({
   previewId: z.string().min(1),

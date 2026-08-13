@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as ExcelJS from 'exceljs';
 import {
   minutesToHours,
+  type AttendanceFilter,
+  type ExportAvailability,
   type ExportRequest,
   type ExportTemplateInput,
   type ExportTemplateLayout,
@@ -86,8 +88,17 @@ export class ExportsService {
     return { ok: true };
   }
 
+  async availability(filter: AttendanceFilter): Promise<ExportAvailability> {
+    const days = await this.attendance.countSummaries(filter);
+    return { hasData: days > 0 };
+  }
+
   // --- generation ---
   async generate(request: ExportRequest, actorId?: number | null): Promise<GeneratedFile> {
+    const { hasData } = await this.availability(request.filter);
+    if (!hasData) {
+      throw new BadRequestException('No data in this interval');
+    }
     const layout = await this.resolveLayout(request);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'TTAH';
