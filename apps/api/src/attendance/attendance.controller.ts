@@ -70,7 +70,7 @@ export class AttendanceController {
 
   @Get('day')
   day(@Query('employeeId') employeeId: string, @Query('date') date: string) {
-    return this.attendance.getDayDetail(Number(employeeId), date);
+    return this.attendance.getDayDetail(Number(employeeId), dateString.parse(date));
   }
 
   @Post('recompute')
@@ -98,5 +98,14 @@ export class AttendanceController {
     @CurrentUser() user: SessionUser,
   ) {
     return this.attendance.clearCorrection(Number(employeeId), date, user.id);
+  }
+
+  @Delete('day')
+  deleteDay(
+    @Query('employeeId') employeeId: string,
+    @Query('date') date: string,
+    @CurrentUser() user: SessionUser,
+  ) {
+    return this.attendance.deleteDay(Number(employeeId), dateString.parse(date), user.id);
   }
 }

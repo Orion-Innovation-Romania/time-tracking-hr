@@ -86,7 +86,7 @@ export class ExportsController {
           filename: file.filename,
           buffer: file.buffer,
           contentType: file.contentType,
-          kind: body.kind,
+          kind: file.kind,
           rangeFrom: body.filter.from,
           rangeTo: body.filter.to,
           scopeLabel: file.scopeLabel,

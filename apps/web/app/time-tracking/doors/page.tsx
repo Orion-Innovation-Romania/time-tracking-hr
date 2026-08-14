@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { DoorOpen, Loader2, RefreshCw } from 'lucide-react';
+import { DoorOpen, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { DOOR_ROLES, type DoorHealthView, type DoorRole, type DoorView } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { monthRange } from '@/lib/utils';
@@ -221,9 +221,36 @@ function DoorHealthCard() {
 }
 
 export default function DoorsPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const doors = useQuery({
     queryKey: ['doors'],
     queryFn: () => api<DoorView[]>('/doors'),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: number) => api(`/doors/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      toast({ title: 'Reader deleted', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['doors'] });
+      queryClient.invalidateQueries({ queryKey: ['summaries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: () => toast({ title: 'Could not delete reader', variant: 'error' }),
+  });
+
+  const purgeInvalid = useMutation({
+    mutationFn: () => api<{ deleted: number; eventsDeleted: number }>('/doors/invalid', { method: 'DELETE' }),
+    onSuccess: (res) => {
+      toast({
+        title: `Removed ${res.deleted} invalid reader${res.deleted === 1 ? '' : 's'}`,
+        variant: 'success',
+      });
+      queryClient.invalidateQueries({ queryKey: ['doors'] });
+      queryClient.invalidateQueries({ queryKey: ['summaries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: () => toast({ title: 'Could not purge invalid readers', variant: 'error' }),
   });
 
   const stats = useMemo(() => {
@@ -232,6 +259,7 @@ export default function DoorsPage() {
       total: rows.length,
       neutral: rows.filter((d) => d.role === 'NEUTRAL').length,
       auto: rows.filter((d) => d.autoDetected).length,
+      invalid: rows.filter((d) => d.valid === false).length,
     };
   }, [doors.data]);
 
@@ -243,6 +271,7 @@ export default function DoorsPage() {
         </h1>
         <p className="text-muted-foreground">
           Classify each reader so the engine can pair entries with exits.
+          Invalid rows come from PDF header leftovers — delete them.
         </p>
       </div>
 
@@ -272,15 +301,39 @@ export default function DoorsPage() {
       <DoorHealthCard />
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
           <CardTitle>
             Readers{' '}
             {doors.data && (
               <span className="text-sm font-normal text-muted-foreground">
-                ({stats.total} total · {stats.neutral} neutral · {stats.auto} auto-detected)
+                ({stats.total} total · {stats.neutral} neutral · {stats.auto} auto-detected
+                {stats.invalid ? ` · ${stats.invalid} invalid` : ''})
               </span>
             )}
           </CardTitle>
+          {stats.invalid > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={purgeInvalid.isPending}
+              onClick={() => {
+                if (
+                  confirm(
+                    `Delete ${stats.invalid} invalid reader(s)? These are PDF header leftovers, not real doors. Their badge events (if any) are removed too.`,
+                  )
+                ) {
+                  purgeInvalid.mutate();
+                }
+              }}
+            >
+              {purgeInvalid.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete invalid readers
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {doors.isLoading ? (
@@ -299,12 +352,13 @@ export default function DoorsPage() {
                   <TableHead className="text-right">Events</TableHead>
                   <TableHead>Detection</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {doors.data!.map((door) => (
-                  <TableRow key={door.id}>
-                    <TableCell className="font-medium">{door.rawLocation}</TableCell>
+                  <TableRow key={door.id} className={door.valid === false ? 'bg-destructive/5' : undefined}>
+                    <TableCell className="max-w-xs font-medium break-all">{door.rawLocation}</TableCell>
                     <TableCell>
                       <DoorNameCell door={door} />
                     </TableCell>
@@ -322,6 +376,24 @@ export default function DoorsPage() {
                         </Badge>
                         <DoorRoleCell door={door} />
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={remove.isPending}
+                        onClick={() => {
+                          const extra =
+                            (door.eventCount ?? 0) > 0
+                              ? ` ${door.eventCount} badge event(s) on this reader will also be deleted.`
+                              : '';
+                          if (confirm(`Delete reader “${door.displayName || door.rawLocation}”?${extra}`)) {
+                            remove.mutate(door.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

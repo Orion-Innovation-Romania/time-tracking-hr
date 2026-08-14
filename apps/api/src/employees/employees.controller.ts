@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -9,8 +10,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { timeString } from '@ttah/shared';
+import { timeString, type SessionUser } from '@ttah/shared';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { AuditService } from '../audit/audit.service';
 import { EmployeesService } from './employees.service';
 
 const updateEmployeeSchema = z.object({
@@ -29,7 +32,10 @@ type ScheduleOverride = z.infer<typeof scheduleOverrideSchema>;
 
 @Controller('employees')
 export class EmployeesController {
-  constructor(private readonly employees: EmployeesService) {}
+  constructor(
+    private readonly employees: EmployeesService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Get()
   list(@Query('search') search?: string, @Query('includeInactive') includeInactive?: string) {
@@ -65,5 +71,20 @@ export class EmployeesController {
     @Body(new ZodValidationPipe(scheduleOverrideSchema)) body: ScheduleOverride,
   ) {
     return this.employees.setSchedule(id, body);
+  }
+
+  @Delete(':id')
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: SessionUser,
+  ) {
+    await this.employees.remove(id);
+    await this.audit.log({
+      userId: user.id,
+      action: 'delete',
+      entity: 'Employee',
+      entityId: id,
+    });
+    return { ok: true };
   }
 }

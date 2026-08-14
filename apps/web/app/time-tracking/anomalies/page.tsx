@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Loader2, Pencil, TriangleAlert } from 'lucide-react';
-import type { AttendanceFilter, DailySummaryView } from '@ttah/shared';
+import { Loader2, Pencil, Trash2, TriangleAlert } from 'lucide-react';
+import type { AnomalyFlag, AttendanceFilter, DailySummaryView } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { formatClock, formatDate, formatMinutes, monthRange } from '@/lib/utils';
 import { FLAG_LABELS, FLAG_DESCRIPTIONS } from '@/lib/labels';
 import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
+import { DayInsightDialog, FlagBadgeButton } from '@/components/day-insight-dialog';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -169,8 +170,25 @@ function CorrectionDialog({
 }
 
 export default function AnomaliesPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [range, setRange] = useState<DateRange>(defaultRange);
   const [editing, setEditing] = useState<DailySummaryView | null>(null);
+  const [insight, setInsight] = useState<{ row: DailySummaryView; flag: AnomalyFlag } | null>(null);
+
+  const deleteDay = useMutation({
+    mutationFn: (row: DailySummaryView) =>
+      api('/attendance/day', {
+        method: 'DELETE',
+        query: { employeeId: row.employeeId, date: row.date },
+      }),
+    onSuccess: () => {
+      toast({ title: 'Hours deleted', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['summaries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: () => toast({ title: 'Could not delete hours', variant: 'error' }),
+  });
 
   const filter: AttendanceFilter = { from: range.from, to: range.to };
   const summaries = useQuery({
@@ -195,7 +213,7 @@ export default function AnomaliesPage() {
             <TriangleAlert className="h-7 w-7" /> Anomalies
           </h1>
           <p className="text-muted-foreground">
-            Days needing review — missing badges, zero duration and more.
+            Days needing review — click a flag to see the badge timeline and why it was raised.
           </p>
         </div>
         <DateRangePicker value={range} onChange={setRange} />
@@ -263,16 +281,36 @@ export default function AnomaliesPage() {
                       <div className="flex flex-wrap gap-1">
                         {row.manual && <Badge variant="secondary">manual</Badge>}
                         {row.flags.map((f) => (
-                          <Badge key={f} variant="warning" title={FLAG_DESCRIPTIONS[f]}>
-                            {FLAG_LABELS[f]}
-                          </Badge>
+                          <FlagBadgeButton
+                            key={f}
+                            flag={f}
+                            onClick={() => setInsight({ row, flag: f })}
+                          />
                         ))}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => setEditing(row)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => setEditing(row)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={deleteDay.isPending}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Delete hours for ${row.employeeName ?? `#${row.employeeId}`} on ${formatDate(row.date)}? Badge events for that day are removed too.`,
+                              )
+                            ) {
+                              deleteDay.mutate(row);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -283,6 +321,13 @@ export default function AnomaliesPage() {
       </Card>
 
       {editing && <CorrectionDialog row={editing} onClose={() => setEditing(null)} />}
+      {insight && (
+        <DayInsightDialog
+          row={insight.row}
+          focusFlag={insight.flag}
+          onClose={() => setInsight(null)}
+        />
+      )}
     </div>
   );
 }

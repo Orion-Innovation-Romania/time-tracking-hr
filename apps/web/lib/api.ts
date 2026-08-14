@@ -75,9 +75,13 @@ async function parseError(res: Response): Promise<ApiFailure> {
 /** Login/forgot/refresh 401s are expected (bad password, no cookie). Everything else means the session is dead. */
 const PUBLIC_AUTH_PATHS = new Set(['/auth/login', '/auth/forgot-password', '/auth/refresh']);
 
+function authPath(path: string): string {
+  return path.split('?')[0];
+}
+
 function sendToLoginIfUnauthorized(path: string, statusCode: number) {
   if (statusCode !== 401) return;
-  if (PUBLIC_AUTH_PATHS.has(path.split('?')[0])) return;
+  if (PUBLIC_AUTH_PATHS.has(authPath(path))) return;
   if (typeof window === 'undefined') return;
   if (window.location.pathname === '/login') return;
   window.location.replace('/login');
@@ -101,19 +105,52 @@ async function request(url: string, init: RequestInit): Promise<Response> {
   }
 }
 
+/** One in-flight refresh so parallel 401s don't rotate the token twice. */
+let refreshInFlight: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = request(buildUrl('/auth/refresh'), {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+    })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+async function fetchWithRefresh(path: string, init: RequestInit, query?: RequestOptions['query']): Promise<Response> {
+  const url = buildUrl(path, query);
+  const res = await request(url, init);
+  if (res.status !== 401) return res;
+  if (PUBLIC_AUTH_PATHS.has(authPath(path))) return res;
+  const refreshed = await tryRefresh();
+  if (!refreshed) return res;
+  return request(url, init);
+}
+
 export async function api<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
   const { method = 'GET', body, query, signal } = options;
-  const res = await request(buildUrl(path, query), {
-    method,
-    credentials: 'include',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-    signal,
-    cache: 'no-store',
-  });
+  const res = await fetchWithRefresh(
+    path,
+    {
+      method,
+      credentials: 'include',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+      signal,
+      cache: 'no-store',
+    },
+    query,
+  );
 
   if (!res.ok) await fail(res, path);
 
@@ -130,7 +167,7 @@ export async function apiUpload<T = unknown>(
   path: string,
   form: FormData,
 ): Promise<T> {
-  const res = await request(buildUrl(path), {
+  const res = await fetchWithRefresh(path, {
     method: 'POST',
     credentials: 'include',
     body: form,
@@ -153,7 +190,7 @@ export async function apiDownload(
   body: unknown,
   fallbackName: string,
 ): Promise<DownloadResult> {
-  const res = await request(buildUrl(path), {
+  const res = await fetchWithRefresh(path, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

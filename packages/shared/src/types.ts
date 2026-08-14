@@ -45,6 +45,7 @@ export interface DoorView {
   displayName: string | null;
   autoDetected: boolean;
   eventCount?: number;
+  valid?: boolean;
 }
 
 /** Per-door anomaly attribution over a date range (misclassification signal). */
@@ -124,6 +125,7 @@ export interface DayInterval {
   start: string;
   end: string;
   source: 'inside' | 'merged-short-exit' | 'grace';
+  zone?: string | null;
 }
 
 export interface DailySummaryView {
@@ -140,6 +142,31 @@ export interface DailySummaryView {
   flags: AnomalyFlag[];
   manual: boolean;
   intervals?: DayInterval[];
+}
+
+/** Why a single badge read is highlighted in the day-insight timeline. */
+export type DayEventIssue =
+  | 'unmatched-exit'
+  | 'unclosed-entry'
+  | 'already-inside'
+  | 'neutral'
+  | 'not-granted';
+
+export interface DayAccessEventView {
+  occurredAt: string; // ISO
+  time: string; // HH:mm:ss wall-clock
+  role: DoorRole;
+  doorLabel: string;
+  zone: string | null;
+  eventType: EventType;
+  issue: DayEventIssue | null;
+  insideAfter: boolean;
+}
+
+/** Daily summary plus the raw badge timeline used to explain flags. */
+export interface DayDetailView extends DailySummaryView {
+  events: DayAccessEventView[];
+  schedule: { startTime: string; endTime: string };
 }
 
 export interface MonthAggregateView {

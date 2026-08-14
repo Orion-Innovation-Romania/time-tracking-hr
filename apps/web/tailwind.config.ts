@@ -67,9 +67,15 @@ const config: Config = {
           from: { opacity: '0', transform: 'translateY(4px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
+        /* Opacity only — must not touch `transform`, or it fights dialog centering. */
+        'dialog-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.25s ease-out',
+        'dialog-in': 'dialog-in 0.15s ease-out',
       },
     },
   },

@@ -9,6 +9,25 @@ export interface ParsedLocation {
   suggestedRole: DoorRole;
 }
 
+/** Real AxTraxNG reader: `3\Panel 1\Et. 4 Intrare fata Drivenets` */
+const AXTRAX_LOCATION = /^\d+\\Panel\s+\d+\\.+/i;
+const HAS_DATETIME = /\d{2}\/\d{2}\/\d{4}/;
+const HAS_NOISE =
+  /(EventLocationDate|Access Granted|Access Denied|Print\s*date|AxTraxNG|User\s*Name|Department:)/i;
+
+/**
+ * True only for a clean AxTrax reader path. Rejects PDF header leftovers
+ * (print dates, EventLocationDate, glued multi-row blobs).
+ */
+export function isValidAxTraxLocation(rawLocation: string): boolean {
+  const loc = rawLocation.replace(/\s+/g, ' ').trim();
+  if (!loc || loc.length > 160) return false;
+  if (HAS_DATETIME.test(loc)) return false;
+  if (HAS_NOISE.test(loc)) return false;
+  if (!AXTRAX_LOCATION.test(loc)) return false;
+  return loc.split('\\').length === 3;
+}
+
 /**
  * Parse an AxTraxNG location such as "3\\Panel 1\\Et. 4 Intrare fata Drivenets".
  * Direction is inferred from the Intrare/Iesire keyword; a rough zone label is

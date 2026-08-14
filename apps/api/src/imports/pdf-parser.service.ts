@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import pdfParse from 'pdf-parse';
 import type { DoorRole, EventType } from '@ttah/shared';
-import { parseLocation } from '../doors/location';
+import { parseLocation, isValidAxTraxLocation } from '../doors/location';
 import { parseReportDateTime } from '../common/time';
 
 export interface ParsedRecord {
@@ -47,9 +47,6 @@ const FROM_TO_REVERSED =
 
 const NOISE =
   /(AxTraxNG|Access Report|Print\s*date|^From\b|^To\b|Page\s*\d|^\d+\/\d+$|Department|User\s*Name|Date\s+Location\s+Event|EventLocationDate|Orion Innovation|Maria Rosetti)/i;
-
-const BAD_LOCATION =
-  /(AxTraxNG|Access Report|Print\s*date|EventLocationDate|User\s*Name|Department|Maria Rosetti|^\d+\/\d+$)/i;
 
 /**
  * Extracts employee, range and access events from an AxTraxNG "Access Report".
@@ -264,9 +261,7 @@ export class PdfParserService {
     const occurredAt = parseReportDateTime(dtStr.trim());
     if (!occurredAt) return null;
     const rawLocation = location.replace(/\s+/g, ' ').trim();
-    if (!rawLocation || BAD_LOCATION.test(rawLocation)) return null;
-    // Real door rows look like "3\Panel 1\..."
-    if (!/\\/.test(rawLocation) && !/\bPanel\b/i.test(rawLocation)) return null;
+    if (!isValidAxTraxLocation(rawLocation)) return null;
     const direction = parseLocation(rawLocation).suggestedRole;
     const eventType: EventType = /denied/i.test(event) ? 'ACCESS_DENIED' : 'ACCESS_GRANTED';
     return { occurredAt, rawLocation, direction, eventType };

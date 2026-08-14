@@ -135,6 +135,7 @@ export class ImportsService {
     const doorMap = new Map<string, { id: number; role: 'IN' | 'OUT' | 'NEUTRAL' }>();
     for (const loc of rawLocations) {
       const door = await this.doors.resolveDoor(loc);
+      if (!door) continue;
       doorMap.set(loc, { id: door.id, role: door.role });
     }
 
@@ -152,16 +153,19 @@ export class ImportsService {
       },
     });
 
-    const rows = entry.report.records.map((r) => {
-      const door = doorMap.get(r.rawLocation)!;
-      return {
-        employeeId,
-        doorId: door.id,
-        occurredAt: r.occurredAt,
-        direction: door.role,
-        eventType: r.eventType,
-        importBatchId: batch.id,
-      };
+    const rows = entry.report.records.flatMap((r) => {
+      const door = doorMap.get(r.rawLocation);
+      if (!door) return [];
+      return [
+        {
+          employeeId,
+          doorId: door.id,
+          occurredAt: r.occurredAt,
+          direction: door.role,
+          eventType: r.eventType,
+          importBatchId: batch.id,
+        },
+      ];
     });
 
     const created = await this.prisma.accessEvent.createMany({ data: rows, skipDuplicates: true });

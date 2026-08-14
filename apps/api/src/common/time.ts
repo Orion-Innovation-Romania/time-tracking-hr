@@ -42,6 +42,11 @@ export function hhmm(date: Date): string {
   return date.toISOString().slice(11, 16);
 }
 
+/** "HH:mm:ss" of a wall-clock-as-UTC Date. */
+export function hhmmss(date: Date): string {
+  return date.toISOString().slice(11, 19);
+}
+
 /** Combine a day (YYYY-MM-DD) with an "HH:mm" into a wall-clock-as-UTC Date. */
 export function atTime(dayKeyStr: string, time: string): Date {
   const [y, m, d] = dayKeyStr.split('-').map(Number);

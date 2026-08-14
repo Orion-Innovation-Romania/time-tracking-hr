@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { DoorRole } from '@ttah/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { parseLocation } from './location';
+import { parseLocation, isValidAxTraxLocation } from './location';
 
 export { parseLocation } from './location';
 export type { ParsedLocation } from './location';
@@ -26,6 +26,7 @@ export class DoorsService {
       displayName: door.displayName,
       autoDetected: door.autoDetected,
       eventCount: door._count.events,
+      valid: isValidAxTraxLocation(door.rawLocation),
     }));
   }
 
@@ -33,6 +34,7 @@ export class DoorsService {
   async resolveDoor(rawLocation: string) {
     const existing = await this.prisma.door.findUnique({ where: { rawLocation } });
     if (existing) return existing;
+    if (!isValidAxTraxLocation(rawLocation)) return null;
     const parsed = parseLocation(rawLocation);
     return this.prisma.door.create({
       data: {
@@ -61,6 +63,30 @@ export class DoorsService {
         ...(data.zone !== undefined ? { zone: data.zone } : {}),
       },
     });
+  }
+
+  async remove(id: number): Promise<{ ok: true; eventsDeleted: number }> {
+    const door = await this.prisma.door.findUnique({
+      where: { id },
+      include: { _count: { select: { events: true } } },
+    });
+    if (!door) throw new NotFoundException('Door not found');
+    const eventsDeleted = door._count.events;
+    await this.prisma.door.delete({ where: { id } });
+    return { ok: true, eventsDeleted };
+  }
+
+  async purgeInvalid(): Promise<{ deleted: number; eventsDeleted: number }> {
+    const rows = await this.prisma.door.findMany({
+      include: { _count: { select: { events: true } } },
+    });
+    const junk = rows.filter((d) => !isValidAxTraxLocation(d.rawLocation));
+    let eventsDeleted = 0;
+    for (const door of junk) {
+      eventsDeleted += door._count.events;
+      await this.prisma.door.delete({ where: { id: door.id } });
+    }
+    return { deleted: junk.length, eventsDeleted };
   }
 
   zones() {

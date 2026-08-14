@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Download, FileSpreadsheet, Loader2, Plus, Star, Trash2, TriangleAlert } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Pencil, Plus, Star, Trash2, TriangleAlert } from 'lucide-react';
 import {
   EXPORT_FORMATS,
   EXPORT_KINDS,
@@ -16,9 +16,10 @@ import {
 } from '@ttah/shared';
 import { api, apiDownload, ApiRequestError } from '@/lib/api';
 import { monthRange } from '@/lib/utils';
-import { METRIC_LABELS } from '@/lib/labels';
+import { METRIC_LABELS, KIND_LABELS } from '@/lib/labels';
 import { useEmployees } from '@/lib/hooks';
 import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
+import { EmployeePicker } from '@/components/employee-picker';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,19 @@ interface TemplateRecord {
 function defaultRange(): DateRange {
   const now = new Date();
   return monthRange(now.getFullYear(), now.getMonth() + 1);
+}
+
+function builtinValue(kind: ExportKind) {
+  return `builtin:${kind}`;
+}
+
+function parseTemplateSelection(value: string): { templateId: number | null; kind: ExportKind } {
+  if (value.startsWith('builtin:')) {
+    const kind = value.slice('builtin:'.length) as ExportKind;
+    return { templateId: null, kind: EXPORT_KINDS.includes(kind) ? kind : 'summary' };
+  }
+  const id = Number(value);
+  return { templateId: Number.isFinite(id) ? id : null, kind: 'summary' };
 }
 
 function emptyTemplate(): ExportTemplateInput {
@@ -131,7 +145,7 @@ function TemplateDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Kind</Label>
+              <Label className="text-xs">Type</Label>
               <Select
                 value={tpl.kind}
                 onValueChange={(v) => setTpl({ ...tpl, kind: v as ExportKind })}
@@ -142,7 +156,7 @@ function TemplateDialog({
                 <SelectContent>
                   {EXPORT_KINDS.map((k) => (
                     <SelectItem key={k} value={k}>
-                      {k}
+                      {KIND_LABELS[k]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -228,7 +242,7 @@ function TemplateDialog({
                 checked={tpl.isDefault}
                 onChange={(e) => setTpl({ ...tpl, isDefault: e.target.checked })}
               />
-              Default for this kind
+              Default for this layout
             </label>
           </div>
         </div>
@@ -254,10 +268,9 @@ export default function ExportsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [range, setRange] = useState<DateRange>(defaultRange);
-  const [templateId, setTemplateId] = useState<string>('');
-  const [kind, setKind] = useState<ExportKind>('summary');
+  const [templateSelection, setTemplateSelection] = useState(builtinValue('summary'));
   const [format, setFormat] = useState<ExportFormat>('xlsx');
-  const [employeeId, setEmployeeId] = useState('all');
+  const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [dialog, setDialog] = useState<{ initial: ExportTemplateInput; id: number | null } | null>(
     null,
   );
@@ -277,7 +290,7 @@ export default function ExportsPage() {
   const exportFilter = {
     from: range.from,
     to: range.to,
-    ...(employeeId !== 'all' ? { employeeIds: [Number(employeeId)] } : {}),
+    ...(employeeIds.length ? { employeeIds: [...employeeIds].sort((a, b) => a - b) } : {}),
   };
 
   const availability = useQuery({
@@ -294,17 +307,22 @@ export default function ExportsPage() {
   const exportBlocked = noData || availability.isFetching;
 
   const generate = useMutation({
-    mutationFn: () =>
-      apiDownload(
+    mutationFn: () => {
+      const { templateId, kind } = parseTemplateSelection(templateSelection);
+      const saved = templateId
+        ? templates.data?.find((t) => t.id === templateId)
+        : undefined;
+      return apiDownload(
         '/exports/generate',
         {
-          templateId: templateId ? Number(templateId) : null,
-          kind,
+          templateId,
+          kind: saved?.kind ?? kind,
           format,
           filter: exportFilter,
         },
         `export.${format}`,
-      ),
+      );
+    },
     onSuccess: (result) => {
       if (result.emailed === 'sent') {
         toast({
@@ -352,53 +370,35 @@ export default function ExportsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Generate export</CardTitle>
-          <CardDescription>Pick a range and template, then download.</CardDescription>
+          <CardDescription>Pick a range, people and template, then download.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <DateRangePicker value={range} onChange={setRange} />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Employee</Label>
-              <Select value={employeeId} onValueChange={setEmployeeId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All employees" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All employees</SelectItem>
-                  {employees.data?.map((employee) => (
-                    <SelectItem key={employee.id} value={String(employee.id)}>
-                      {employee.displayName}
-                      {!employee.active ? ' (inactive)' : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {employees.isLoading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : (
+            <EmployeePicker
+              employees={employees.data ?? []}
+              selectedIds={employeeIds}
+              onChange={setEmployeeIds}
+            />
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Template</Label>
-              <Select value={templateId} onValueChange={setTemplateId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="None (default layout)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.data?.map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>
-                      {t.name} ({t.kind})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Kind</Label>
-              <Select value={kind} onValueChange={(v) => setKind(v as ExportKind)}>
+              <Select value={templateSelection} onValueChange={setTemplateSelection}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {EXPORT_KINDS.map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {k}
+                    <SelectItem key={builtinValue(k)} value={builtinValue(k)}>
+                      {KIND_LABELS[k]} (built-in)
+                    </SelectItem>
+                  ))}
+                  {templates.data?.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)}>
+                      {t.name} · {KIND_LABELS[t.kind]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -480,7 +480,7 @@ export default function ExportsPage() {
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      <Badge variant="secondary">{t.kind}</Badge>
+                      <Badge variant="secondary">{KIND_LABELS[t.kind]}</Badge>
                       {t.kind === 'summary' && (
                         <Badge variant="outline">{t.layout.columns.length} columns</Badge>
                       )}
@@ -489,7 +489,7 @@ export default function ExportsPage() {
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="icon"
                       onClick={() =>
                         setDialog({
                           id: t.id,
@@ -507,7 +507,7 @@ export default function ExportsPage() {
                         })
                       }
                     >
-                      Edit
+                      <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"

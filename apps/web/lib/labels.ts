@@ -1,4 +1,4 @@
-import type { AnomalyFlag, DoorRole, LeaveType, MetricKey, ConditionType } from '@ttah/shared';
+import type { AnomalyFlag, DoorRole, LeaveType, MetricKey, ConditionType, ExportKind } from '@ttah/shared';
 
 export const DOOR_ROLE_LABELS: Record<DoorRole, string> = {
   IN: 'Entry',
@@ -20,9 +20,9 @@ export const FLAG_LABELS: Record<AnomalyFlag, string> = {
 /** Human-readable explanation shown as a tooltip / legend in the UI. */
 export const FLAG_DESCRIPTIONS: Record<AnomalyFlag, string> = {
   MISSING_EXIT:
-    'The employee badged in but no matching exit was recorded. Presence is closed at the end of the schedule, so the worked hours are an estimate.',
+    'The last counted entry has no matching exit. Presence is closed at the scheduled end, so worked hours for that last session are an estimate. Last out is still the last confirmed exit from a completed session — they may have entered again afterwards.',
   MISSING_ENTRY:
-    'An exit badge was found without a preceding entry. Usually caused by a misclassified door or a badge read that was missed.',
+    'An exit badge was recorded while the person was not already inside. This does not mean First in is missing: First in is the first counted entry. Typical causes: an extra exit, an exit before the first entry, or a door classified as Exit that was used as Entry.',
   OVERNIGHT: 'The presence session appears to cross midnight into the next day.',
   ZERO_DURATION:
     'There are access events for the day, but no valid entry→exit interval could be built, so worked time is zero.',
@@ -64,4 +64,10 @@ export const CONDITION_LABELS: Record<ConditionType, string> = {
   ROUND_DAILY_MINUTES: 'Round daily total (min)',
   IGNORE_ZONE: 'Ignore zone',
   MAX_DAILY_MINUTES: 'Cap daily total (min)',
+};
+
+export const KIND_LABELS: Record<ExportKind, string> = {
+  summary: 'Summary',
+  pontaj: 'Pontaj',
+  raw: 'Raw events',
 };

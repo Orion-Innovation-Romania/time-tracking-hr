@@ -5,6 +5,7 @@ import {
   minutesToHours,
   type AttendanceFilter,
   type ExportAvailability,
+  type ExportKind,
   type ExportRequest,
   type ExportTemplateInput,
   type ExportTemplateLayout,
@@ -31,6 +32,7 @@ export interface GeneratedFile {
   buffer: Buffer;
   contentType: string;
   scopeLabel: string;
+  kind: ExportKind;
 }
 
 @Injectable()
@@ -99,14 +101,14 @@ export class ExportsService {
     if (!hasData) {
       throw new BadRequestException('No data in this interval');
     }
-    const layout = await this.resolveLayout(request);
+    const { kind, layout } = await this.resolveKindAndLayout(request);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'TTAH';
     workbook.created = new Date();
 
-    if (request.kind === 'pontaj') {
+    if (kind === 'pontaj') {
       await this.buildPontaj(workbook, request, layout);
-    } else if (request.kind === 'raw') {
+    } else if (kind === 'raw') {
       await this.buildRaw(workbook, request);
     } else {
       await this.buildSummary(workbook, request, layout);
@@ -115,7 +117,7 @@ export class ExportsService {
     const scope = await this.resolveScope(request.filter.employeeIds);
     const base = [
       'ttah',
-      request.kind,
+      kind,
       scope.slug,
       `${request.filter.from}_${request.filter.to}`,
     ]
@@ -126,16 +128,23 @@ export class ExportsService {
       action: 'export',
       entity: 'Attendance',
       after: {
-        kind: request.kind,
+        kind,
         format: request.format,
         filter: request.filter,
         sendEmail: request.sendEmail ?? null,
+        templateId: request.templateId ?? null,
       },
     });
 
     if (request.format === 'csv') {
       const buffer = (await workbook.csv.writeBuffer()) as unknown as Buffer;
-      return { filename: `${base}.csv`, buffer, contentType: 'text/csv; charset=utf-8', scopeLabel: scope.label };
+      return {
+        filename: `${base}.csv`,
+        buffer,
+        contentType: 'text/csv; charset=utf-8',
+        scopeLabel: scope.label,
+        kind,
+      };
     }
     const buffer = (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
     return {
@@ -143,6 +152,7 @@ export class ExportsService {
       buffer,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       scopeLabel: scope.label,
+      kind,
     };
   }
 
@@ -158,18 +168,38 @@ export class ExportsService {
     return { label: `${employeeIds.length} employees`, slug: `${employeeIds.length}-employees` };
   }
 
-  private async resolveLayout(request: ExportRequest): Promise<ExportTemplateLayout> {
+  private async resolveKindAndLayout(
+    request: ExportRequest,
+  ): Promise<{ kind: ExportKind; layout: ExportTemplateLayout }> {
     if (request.templateId) {
       const template = await this.getTemplate(request.templateId);
-      return template.layout as unknown as ExportTemplateLayout;
+      return {
+        kind: template.kind,
+        layout: template.layout as unknown as ExportTemplateLayout,
+      };
     }
-    if (request.kind === 'pontaj') {
-      return { title: 'Pontaj', columns: [], includeTotals: true, matrixMetric: 'workedHours' };
+    const kind = request.kind ?? 'summary';
+    if (kind === 'pontaj') {
+      return {
+        kind,
+        layout: { title: 'Pontaj', columns: [], includeTotals: true, matrixMetric: 'workedHours' },
+      };
     }
-    if (request.kind === 'raw') {
-      return { title: 'Raw attendance', columns: [], includeTotals: false, matrixMetric: 'workedHours' };
+    if (kind === 'raw') {
+      return {
+        kind,
+        layout: { title: 'Raw attendance', columns: [], includeTotals: false, matrixMetric: 'workedHours' },
+      };
     }
-    return { title: 'Summary', columns: DEFAULT_SUMMARY_COLUMNS, includeTotals: true, matrixMetric: 'workedHours' };
+    return {
+      kind: 'summary',
+      layout: {
+        title: 'Summary',
+        columns: DEFAULT_SUMMARY_COLUMNS,
+        includeTotals: true,
+        matrixMetric: 'workedHours',
+      },
+    };
   }
 
   private metricValue(agg: MonthAggregateView, key: MetricKey): string | number {

@@ -72,6 +72,13 @@ export class EmployeesService {
     return this.getById(id);
   }
 
+  async remove(id: number): Promise<{ ok: true }> {
+    const existing = await this.prisma.employee.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Employee not found');
+    await this.prisma.employee.delete({ where: { id } });
+    return { ok: true };
+  }
+
   /**
    * Resolve (or lazily create) the employee behind a raw report user name.
    * Matching order: exact alias -> canonical name -> create new. Aliases and

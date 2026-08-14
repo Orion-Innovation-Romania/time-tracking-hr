@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { Loader2, Pencil, Search, Users } from 'lucide-react';
+import { Loader2, Pencil, Search, Trash2, Users } from 'lucide-react';
 import type { EmployeeView } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { useEmployees } from '@/lib/hooks';
@@ -200,9 +200,22 @@ function EmployeeDialog({
 }
 
 export default function EmployeesPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const employees = useEmployees();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<EmployeeView | null>(null);
+
+  const remove = useMutation({
+    mutationFn: (id: number) => api(`/employees/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      toast({ title: 'Employee deleted', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['summaries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: () => toast({ title: 'Could not delete employee', variant: 'error' }),
+  });
 
   const filtered = useMemo(() => {
     const list = employees.data ?? [];
@@ -222,7 +235,9 @@ export default function EmployeesPage() {
           <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
             <Users className="h-7 w-7" /> Employees
           </h1>
-          <p className="text-muted-foreground">Manage display names and work schedules.</p>
+          <p className="text-muted-foreground">
+            Manage display names and work schedules. Delete removes the person and all their hours.
+          </p>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -283,9 +298,27 @@ export default function EmployeesPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => setEditing(e)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => setEditing(e)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={remove.isPending}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Delete ${e.displayName}? This removes their badge events, hours and leaves. A later import with the same name will recreate them.`,
+                              )
+                            ) {
+                              remove.mutate(e.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

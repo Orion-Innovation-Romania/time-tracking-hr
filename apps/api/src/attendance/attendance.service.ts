@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   hhmmToMinutes,
   type AnomalyFlag,
   type AttendanceFilter,
   type DailySummaryView,
+  type DayDetailView,
   type DashboardKpis,
   type DayCorrectionInput,
   type DoorHealthView,
@@ -15,7 +16,8 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { ConfigStoreService } from '../config/config-store.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { addDays, dateOnly, dayKey, hhmm } from '../common/time';
+import { addDays, dateOnly, dayKey, hhmm, hhmmss } from '../common/time';
+import { annotateDayEvents } from './anomaly-explain';
 import {
   computeDay,
   type ConditionRuleLite,
@@ -214,12 +216,48 @@ export class AttendanceService {
     return this.prisma.dailySummary.count({ where: this.buildWhere(filter) });
   }
 
-  async getDayDetail(employeeId: number, key: string): Promise<DailySummaryView | null> {
-    const row = await this.prisma.dailySummary.findUnique({
-      where: { employeeId_date: { employeeId, date: dateOnly(key) } },
-      include: { employee: true },
-    });
-    return row ? this.toSummaryView(row) : null;
+  async getDayDetail(employeeId: number, key: string): Promise<DayDetailView | null> {
+    const dayStart = dateOnly(key);
+    const [row, cfg, override, eventRows] = await Promise.all([
+      this.prisma.dailySummary.findUnique({
+        where: { employeeId_date: { employeeId, date: dayStart } },
+        include: { employee: true },
+      }),
+      this.loadConfig(),
+      this.prisma.employeeSchedule.findUnique({ where: { employeeId } }),
+      this.prisma.accessEvent.findMany({
+        where: { employeeId, occurredAt: { gte: dayStart, lt: addDays(dayStart, 1) } },
+        include: { door: true },
+        orderBy: { occurredAt: 'asc' },
+      }),
+    ]);
+    if (!row) return null;
+
+    const { schedule } = this.effectiveSchedule(cfg, override);
+    const annotated = annotateDayEvents(
+      eventRows.map((ev) => ({
+        occurredAt: ev.occurredAt,
+        role: ev.door.role,
+        eventType: ev.eventType,
+        doorLabel: ev.door.displayName?.trim() || ev.door.rawLocation,
+        zone: ev.door.zone,
+      })),
+    );
+
+    return {
+      ...this.toSummaryView(row),
+      schedule,
+      events: annotated.map((ev) => ({
+        occurredAt: ev.occurredAt.toISOString(),
+        time: hhmmss(ev.occurredAt),
+        role: ev.role,
+        doorLabel: ev.doorLabel,
+        zone: ev.zone,
+        eventType: ev.eventType,
+        issue: ev.issue,
+        insideAfter: ev.insideAfter,
+      })),
+    };
   }
 
   async getDashboard(filter: AttendanceFilter): Promise<{
@@ -488,6 +526,34 @@ export class AttendanceService {
       after: input,
     });
     return row;
+  }
+
+  /**
+   * Permanently remove a day's hours: badge events + computed summary.
+   * Events must go too, otherwise the next recompute recreates the summary.
+   */
+  async deleteDay(employeeId: number, key: string, actorId?: number | null) {
+    const date = dateOnly(key);
+    const dayEnd = addDays(date, 1);
+    const [events, summaries] = await this.prisma.$transaction([
+      this.prisma.accessEvent.deleteMany({
+        where: { employeeId, occurredAt: { gte: date, lt: dayEnd } },
+      }),
+      this.prisma.dailySummary.deleteMany({
+        where: { employeeId, date },
+      }),
+    ]);
+    if (events.count === 0 && summaries.count === 0) {
+      throw new NotFoundException('No hours found for this employee and date');
+    }
+    await this.audit.log({
+      userId: actorId ?? null,
+      action: 'delete',
+      entity: 'DailySummary',
+      entityId: `${employeeId}:${key}`,
+      after: { eventsDeleted: events.count, summariesDeleted: summaries.count },
+    });
+    return { ok: true, eventsDeleted: events.count, summariesDeleted: summaries.count };
   }
 
   async clearCorrection(employeeId: number, key: string, actorId?: number | null) {

@@ -200,7 +200,8 @@ export type ExportTemplateInput = z.infer<typeof exportTemplateSchema>;
 
 export const exportRequestSchema = z.object({
   templateId: z.number().int().positive().nullable().optional(),
-  kind: z.enum(EXPORT_KINDS).default('summary'),
+  /** Used only when templateId is omitted (built-in layouts). */
+  kind: z.enum(EXPORT_KINDS).optional(),
   format: z.enum(EXPORT_FORMATS).default('xlsx'),
   filter: attendanceFilterSchema,
   sendEmail: z.boolean().optional(),

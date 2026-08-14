@@ -24,17 +24,21 @@ import {
   Users,
 } from 'lucide-react';
 import type {
+  AnomalyFlag,
   AttendanceFilter,
   DailySummaryView,
   DashboardKpis,
   ScheduleConfig,
+  ThresholdConfig,
 } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { formatClock, formatDate, formatMinutes, monthRange } from '@/lib/utils';
-import { FLAG_LABELS } from '@/lib/labels';
 import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
+import { DayInsightDialog, FlagBadgeButton } from '@/components/day-insight-dialog';
+import { EmployeeSearchSelect } from '@/components/employee-search-select';
+import { useEmployees } from '@/lib/hooks';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -60,8 +64,8 @@ interface WeekStat {
   personDays: number; // total present employee-days
   avgDaysPerPerson: number;
   avgWorkedMinutes: number; // averaged over present days
-  fullDays: number; // present days reaching 8h
-  fullDayPct: number; // 0-100
+  peopleAt8h: number; // people whose avg worked time that week was >= 8h
+  peopleAt8hPct: number; // 0-100
 }
 
 /** ISO-8601 week (Mon-based) for a "YYYY-MM-DD" wall-clock date. */
@@ -85,33 +89,47 @@ function isoWeek(dateStr: string): { key: string; weekNo: number; weekStart: str
 function computeWeekStats(rows: DailySummaryView[]): WeekStat[] {
   const byWeek = new Map<
     string,
-    { weekNo: number; weekStart: string; employees: Set<number>; workedTotal: number; fullDays: number; personDays: number }
+    {
+      weekNo: number;
+      weekStart: string;
+      perEmp: Map<number, { days: number; worked: number }>;
+    }
   >();
   for (const row of rows) {
-    // A summary row means the employee badged in; count it as a present day.
     const { key, weekNo, weekStart } = isoWeek(row.date);
     let bucket = byWeek.get(key);
     if (!bucket) {
-      bucket = { weekNo, weekStart, employees: new Set(), workedTotal: 0, fullDays: 0, personDays: 0 };
+      bucket = { weekNo, weekStart, perEmp: new Map() };
       byWeek.set(key, bucket);
     }
-    bucket.employees.add(row.employeeId);
-    bucket.personDays += 1;
-    bucket.workedTotal += row.workedMinutes;
-    if (row.workedMinutes >= FULL_DAY_MINUTES) bucket.fullDays += 1;
+    const emp = bucket.perEmp.get(row.employeeId) ?? { days: 0, worked: 0 };
+    emp.days += 1;
+    emp.worked += row.workedMinutes;
+    bucket.perEmp.set(row.employeeId, emp);
   }
   return [...byWeek.entries()]
-    .map(([key, b]) => ({
-      key,
-      weekNo: b.weekNo,
-      weekStart: b.weekStart,
-      people: b.employees.size,
-      personDays: b.personDays,
-      avgDaysPerPerson: b.employees.size ? b.personDays / b.employees.size : 0,
-      avgWorkedMinutes: b.personDays ? Math.round(b.workedTotal / b.personDays) : 0,
-      fullDays: b.fullDays,
-      fullDayPct: b.personDays ? Math.round((b.fullDays / b.personDays) * 100) : 0,
-    }))
+    .map(([key, b]) => {
+      const people = b.perEmp.size;
+      let personDays = 0;
+      let workedTotal = 0;
+      let peopleAt8h = 0;
+      for (const emp of b.perEmp.values()) {
+        personDays += emp.days;
+        workedTotal += emp.worked;
+        if (emp.days > 0 && emp.worked / emp.days >= FULL_DAY_MINUTES) peopleAt8h += 1;
+      }
+      return {
+        key,
+        weekNo: b.weekNo,
+        weekStart: b.weekStart,
+        people,
+        personDays,
+        avgDaysPerPerson: people ? personDays / people : 0,
+        avgWorkedMinutes: personDays ? Math.round(workedTotal / personDays) : 0,
+        peopleAt8h,
+        peopleAt8hPct: people ? Math.round((peopleAt8h / people) * 100) : 0,
+      };
+    })
     .sort((a, b) => b.weekStart.localeCompare(a.weekStart));
 }
 
@@ -184,38 +202,45 @@ interface PunctStat {
   name: string;
   days: number;
   avgArrivalMin: number;
-  avgLateMin: number; // averaged over arrival days, early counts as 0
-  onTimePct: number; // arrived at or before schedule start
+  avgLateMin: number; // minutes past start+grace; within grace counts as 0
+  onTimePct: number; // arrived by start + grace
 }
 
-function computePunctuality(rows: DailySummaryView[], startMin: number): PunctStat[] {
+function computePunctuality(
+  rows: DailySummaryView[],
+  startMin: number,
+  graceMin: number,
+): PunctStat[] {
+  const lateAfter = startMin + Math.max(0, graceMin);
   const byEmp = new Map<
     number,
-    { name: string; days: number; arrivalTotal: number; lateTotal: number; onTime: number }
+    { name: string; days: number; arrivalTotal: number; onTime: number }
   >();
   for (const r of rows) {
     const inMin = hmToMin(r.firstIn);
     if (inMin == null) continue;
     let b = byEmp.get(r.employeeId);
     if (!b) {
-      b = { name: r.employeeName ?? `#${r.employeeId}`, days: 0, arrivalTotal: 0, lateTotal: 0, onTime: 0 };
+      b = { name: r.employeeName ?? `#${r.employeeId}`, days: 0, arrivalTotal: 0, onTime: 0 };
       byEmp.set(r.employeeId, b);
     }
     b.days += 1;
     b.arrivalTotal += inMin;
-    b.lateTotal += Math.max(0, inMin - startMin);
-    if (inMin <= startMin) b.onTime += 1;
+    if (inMin <= lateAfter) b.onTime += 1;
   }
   return [...byEmp.entries()]
-    .map(([employeeId, b]) => ({
-      employeeId,
-      name: b.name,
-      days: b.days,
-      avgArrivalMin: b.days ? Math.round(b.arrivalTotal / b.days) : 0,
-      avgLateMin: b.days ? Math.round(b.lateTotal / b.days) : 0,
-      onTimePct: b.days ? Math.round((b.onTime / b.days) * 100) : 0,
-    }))
-    .sort((a, b) => b.avgLateMin - a.avgLateMin);
+    .map(([employeeId, b]) => {
+      const avgArrivalMin = b.days ? Math.round(b.arrivalTotal / b.days) : 0;
+      return {
+        employeeId,
+        name: b.name,
+        days: b.days,
+        avgArrivalMin,
+        avgLateMin: Math.max(0, avgArrivalMin - lateAfter),
+        onTimePct: b.days ? Math.round((b.onTime / b.days) * 100) : 0,
+      };
+    })
+    .sort((a, b) => b.avgLateMin - a.avgLateMin || a.onTimePct - b.onTimePct);
 }
 
 function defaultRange(): DateRange {
@@ -254,17 +279,27 @@ function KpiCard({
 
 export default function DashboardPage() {
   const [range, setRange] = useState<DateRange>(defaultRange);
+  const [employeeIds, setEmployeeIds] = useState<number[]>([]);
+  const [insight, setInsight] = useState<{ row: DailySummaryView; flag: AnomalyFlag } | null>(null);
 
-  const filter: AttendanceFilter = { from: range.from, to: range.to };
+  const employees = useEmployees(true);
+  const comparing = employeeIds.length > 0;
+  const scopedIds = [...employeeIds].sort((a, b) => a - b);
+
+  const filter: AttendanceFilter = {
+    from: range.from,
+    to: range.to,
+    ...(comparing ? { employeeIds: scopedIds } : {}),
+  };
 
   const dashboard = useQuery({
-    queryKey: ['dashboard', range.from, range.to],
+    queryKey: ['dashboard', range.from, range.to, scopedIds],
     queryFn: () =>
       api<DashboardResponse>('/attendance/dashboard', { method: 'POST', body: filter }),
   });
 
   const summaries = useQuery({
-    queryKey: ['summaries', range.from, range.to],
+    queryKey: ['summaries', range.from, range.to, scopedIds],
     queryFn: () =>
       api<DailySummaryView[]>('/attendance/summaries', { method: 'POST', body: filter }),
   });
@@ -273,7 +308,12 @@ export default function DashboardPage() {
     queryKey: ['config', 'schedule'],
     queryFn: () => api<ScheduleConfig>('/config/schedule'),
   });
+  const thresholds = useQuery({
+    queryKey: ['config', 'thresholds'],
+    queryFn: () => api<ThresholdConfig>('/config/thresholds'),
+  });
   const startMin = hmToMin(schedule.data?.startTime ?? null) ?? 9 * 60;
+  const graceMin = thresholds.data?.overtimeThresholdMinutes ?? 15;
 
   const kpis = dashboard.data?.kpis;
 
@@ -304,8 +344,8 @@ export default function DashboardPage() {
   }, [summaries.data]);
 
   const punctuality = useMemo(
-    () => computePunctuality(summaries.data ?? [], startMin),
-    [summaries.data, startMin],
+    () => computePunctuality(summaries.data ?? [], startMin, graceMin),
+    [summaries.data, startMin, graceMin],
   );
 
   const weekChart = useMemo(
@@ -315,30 +355,42 @@ export default function DashboardPage() {
         workedHours: Math.round((w.avgWorkedMinutes / 60) * 10) / 10,
         people: w.people,
         avgDays: Math.round(w.avgDaysPerPerson * 10) / 10,
-        fullDayPct: w.fullDayPct,
+        fullDayPct: w.peopleAt8hPct,
       })),
     [weekStats],
   );
 
-  const empChart = useMemo(
-    () =>
-      empStats.map((e) => ({
-        name: e.name,
-        worked: Math.round((e.avgWorkedMinutes / 60) * 10) / 10,
-        outside: Math.round((e.avgOutsideMinutes / 60) * 10) / 10,
-      })),
-    [empStats],
-  );
+  const EMP_CHART_CAP = 12;
+  const empChart = useMemo(() => {
+    const rows = comparing ? empStats : empStats.slice(0, EMP_CHART_CAP);
+    return rows.map((e) => ({
+      name: e.name,
+      worked: Math.round((e.avgWorkedMinutes / 60) * 10) / 10,
+      outside: Math.round((e.avgOutsideMinutes / 60) * 10) / 10,
+    }));
+  }, [empStats, comparing]);
+
+  const punctualityRows = comparing ? punctuality : punctuality.slice(0, 20);
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Office presence overview</p>
+          <p className="text-muted-foreground">
+            {comparing
+              ? `Comparing ${employeeIds.length} ${employeeIds.length === 1 ? 'person' : 'people'}`
+              : 'Overview · all employees'}
+          </p>
         </div>
         <DateRangePicker value={range} onChange={setRange} />
       </div>
+
+      <EmployeeSearchSelect
+        employees={employees.data ?? []}
+        selectedIds={employeeIds}
+        onChange={setEmployeeIds}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {dashboard.isLoading || !kpis ? (
@@ -370,7 +422,8 @@ export default function DashboardPage() {
             <CalendarCheck className="h-5 w-5" /> Weekly attendance
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            How many people came in each week, how many days they came, and whether they reached 8h/day.
+            Who came that week, how often, how long they worked on those days, and how many of
+            the people who came averaged at least 8 hours per office day.
           </p>
         </CardHeader>
         <CardContent>
@@ -419,7 +472,7 @@ export default function DashboardPage() {
                       <TableHead className="text-right">People present</TableHead>
                       <TableHead className="text-right">Avg days / person</TableHead>
                       <TableHead className="text-right">Avg worked / day</TableHead>
-                      <TableHead className="text-right">Full 8h days</TableHead>
+                      <TableHead className="text-right">Did ≥8h / who came</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -430,8 +483,11 @@ export default function DashboardPage() {
                         <TableCell className="text-right">{w.avgDaysPerPerson.toFixed(1)}</TableCell>
                         <TableCell className="text-right">{formatMinutes(w.avgWorkedMinutes)}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant={w.fullDayPct >= 50 ? 'success' : 'warning'}>
-                            {w.fullDays}/{w.personDays} · {w.fullDayPct}%
+                          <Badge
+                            variant={w.peopleAt8hPct >= 50 ? 'success' : 'warning'}
+                            title={`${w.peopleAt8h} of ${w.people} people who came this week averaged at least 8h on the days they were in.`}
+                          >
+                            {w.peopleAt8h} of {w.people} · {w.peopleAt8hPct}%
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -452,6 +508,9 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground">
             Average per office day: blue = hours actually worked inside; amber = break time
             (breaks / stepped out) between their first entry and last exit.
+            {!comparing && empStats.length > EMP_CHART_CAP
+              ? ` Showing the ${EMP_CHART_CAP} longest days — search above to compare specific people.`
+              : null}
           </p>
         </CardHeader>
         <CardContent>
@@ -507,7 +566,11 @@ export default function DashboardPage() {
             <AlarmClock className="h-5 w-5" /> Punctuality
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Arrival vs the {minToHm(startMin)} scheduled start. Sorted by worst average lateness.
+            Arrival vs {minToHm(startMin)}. Avg late is taken from avg arrival after a {graceMin} min
+            grace. On-time is the share of days they arrived by {minToHm(startMin + graceMin)}.
+            {!comparing && punctuality.length > 20
+              ? ' Showing the 20 latest arrivals — search to compare specific people.'
+              : ''}
           </p>
         </CardHeader>
         <CardContent>
@@ -527,7 +590,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {punctuality.map((p) => (
+                {punctualityRows.map((p) => (
                   <TableRow key={p.employeeId}>
                     <TableCell className="font-medium">{p.name}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.days}</TableCell>
@@ -555,6 +618,7 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Daily summaries</CardTitle>
+          <CardDescription>Click a flag to see why it was raised for that person and day.</CardDescription>
         </CardHeader>
         <CardContent>
           {summaries.isLoading ? (
@@ -603,9 +667,11 @@ export default function DashboardPage() {
                       <div className="flex flex-wrap gap-1">
                         {row.manual && <Badge variant="secondary">manual</Badge>}
                         {row.flags.map((f) => (
-                          <Badge key={f} variant="warning">
-                            {FLAG_LABELS[f]}
-                          </Badge>
+                          <FlagBadgeButton
+                            key={f}
+                            flag={f}
+                            onClick={() => setInsight({ row, flag: f })}
+                          />
                         ))}
                       </div>
                     </TableCell>
@@ -616,6 +682,14 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {insight && (
+        <DayInsightDialog
+          row={insight.row}
+          focusFlag={insight.flag}
+          onClose={() => setInsight(null)}
+        />
+      )}
     </div>
   );
 }

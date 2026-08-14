@@ -18,6 +18,7 @@
     "shared:build": "pnpm --filter @ttah/shared build",
     "db:generate": "pnpm --filter @ttah/api prisma:generate",
     "db:migrate": "pnpm --filter @ttah/api prisma:migrate",
-    "db:seed": "pnpm --filter @ttah/api prisma:seed"
+    "db:seed": "pnpm --filter @ttah/api prisma:seed",
+    "db:seed-demo": "pnpm --filter @ttah/api prisma:seed-demo"
   }
 }

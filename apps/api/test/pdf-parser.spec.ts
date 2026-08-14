@@ -48,6 +48,17 @@ describe('PdfParserService.parseText', () => {
     expect(report.records.map((r) => r.direction)).toEqual(['IN', 'OUT']);
   });
 
+  it('rejects PDF header leftovers as door locations', () => {
+    const text = [
+      'User Name TEST, USER',
+      '30/06/2026 23:59:59 01/06/2026 00:00:00 1/5 EventLocationDate Access Granted',
+      '04/06/2026 08:59:10 3\\Panel 1\\Et. 4 Intrare fata Drivenets Access Granted',
+    ].join('\n');
+    const report = parser.parseText(text);
+    expect(report.records).toHaveLength(1);
+    expect(report.records[0].rawLocation).toBe('3\\Panel 1\\Et. 4 Intrare fata Drivenets');
+  });
+
   it('deduplicates identical rows and warns when empty', () => {
     const text = [
       'User Name TEST, USER',
