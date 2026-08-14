@@ -5,9 +5,9 @@ import { useMemo, useState } from 'react';
 import { Loader2, Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import type { AnomalyFlag, AttendanceFilter, DailySummaryView } from '@ttah/shared';
 import { api } from '@/lib/api';
-import { formatClock, formatDate, formatMinutes, monthRange } from '@/lib/utils';
+import { currentMonthRange, formatClock, formatDate, formatMinutes } from '@/lib/utils';
 import { FLAG_LABELS, FLAG_DESCRIPTIONS } from '@/lib/labels';
-import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
+import { DateRangePicker, isIsoDate, type DateRange } from '@/components/date-range-picker';
 import { DayInsightDialog, FlagBadgeButton } from '@/components/day-insight-dialog';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
@@ -34,8 +34,7 @@ import {
 } from '@/components/ui/table';
 
 function defaultRange(): DateRange {
-  const now = new Date();
-  return monthRange(now.getFullYear(), now.getMonth() + 1);
+  return currentMonthRange();
 }
 
 function CorrectionDialog({
@@ -193,8 +192,10 @@ export default function AnomaliesPage() {
   const filter: AttendanceFilter = { from: range.from, to: range.to };
   const summaries = useQuery({
     queryKey: ['summaries', range.from, range.to],
-    queryFn: () =>
-      api<DailySummaryView[]>('/attendance/summaries', { method: 'POST', body: filter }),
+    queryFn: ({ signal }) =>
+      api<DailySummaryView[]>('/attendance/summaries', { method: 'POST', body: filter, signal }),
+    enabled: isIsoDate(range.from) && isIsoDate(range.to),
+    placeholderData: (prev) => prev,
   });
 
   const flagged = useMemo(
@@ -244,7 +245,7 @@ export default function AnomaliesPage() {
             <Skeleton className="h-48 w-full" />
           ) : flagged.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
-              No anomalies in this range. 🎉
+              No anomalies in this month. 🎉
             </p>
           ) : (
             <Table>

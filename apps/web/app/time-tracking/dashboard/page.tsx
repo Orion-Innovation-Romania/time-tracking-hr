@@ -32,8 +32,8 @@ import type {
   ThresholdConfig,
 } from '@ttah/shared';
 import { api } from '@/lib/api';
-import { formatClock, formatDate, formatMinutes, monthRange } from '@/lib/utils';
-import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
+import { currentMonthRange, formatClock, formatDate, formatMinutes } from '@/lib/utils';
+import { DateRangePicker, isIsoDate, type DateRange } from '@/components/date-range-picker';
 import { DayInsightDialog, FlagBadgeButton } from '@/components/day-insight-dialog';
 import { EmployeeSearchSelect } from '@/components/employee-search-select';
 import { useEmployees } from '@/lib/hooks';
@@ -244,8 +244,7 @@ function computePunctuality(
 }
 
 function defaultRange(): DateRange {
-  const now = new Date();
-  return monthRange(now.getFullYear(), now.getMonth() + 1);
+  return currentMonthRange();
 }
 
 function KpiCard({
@@ -284,7 +283,15 @@ export default function DashboardPage() {
 
   const employees = useEmployees(true);
   const comparing = employeeIds.length > 0;
-  const scopedIds = [...employeeIds].sort((a, b) => a - b);
+  const scopedKey = useMemo(
+    () => [...employeeIds].sort((a, b) => a - b).join(','),
+    [employeeIds],
+  );
+  const scopedIds = useMemo(
+    () => (scopedKey ? scopedKey.split(',').map(Number) : []),
+    [scopedKey],
+  );
+  const rangeOk = isIsoDate(range.from) && isIsoDate(range.to);
 
   const filter: AttendanceFilter = {
     from: range.from,
@@ -293,15 +300,19 @@ export default function DashboardPage() {
   };
 
   const dashboard = useQuery({
-    queryKey: ['dashboard', range.from, range.to, scopedIds],
-    queryFn: () =>
-      api<DashboardResponse>('/attendance/dashboard', { method: 'POST', body: filter }),
+    queryKey: ['dashboard', range.from, range.to, scopedKey],
+    queryFn: ({ signal }) =>
+      api<DashboardResponse>('/attendance/dashboard', { method: 'POST', body: filter, signal }),
+    enabled: rangeOk,
+    placeholderData: (prev) => prev,
   });
 
   const summaries = useQuery({
-    queryKey: ['summaries', range.from, range.to, scopedIds],
-    queryFn: () =>
-      api<DailySummaryView[]>('/attendance/summaries', { method: 'POST', body: filter }),
+    queryKey: ['summaries', range.from, range.to, scopedKey],
+    queryFn: ({ signal }) =>
+      api<DailySummaryView[]>('/attendance/summaries', { method: 'POST', body: filter, signal }),
+    enabled: rangeOk,
+    placeholderData: (prev) => prev,
   });
 
   const schedule = useQuery({

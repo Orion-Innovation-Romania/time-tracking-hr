@@ -10,6 +10,7 @@
 import { Prisma, PrismaClient, type DoorRole, type EventType, type LeaveType } from '@prisma/client';
 import { computeDay, type ConditionRuleLite, type DayOptions } from '../src/attendance/calculation';
 import { dateOnly, dayKey } from '../src/common/time';
+import { doorGroupingKey, parseLocation } from '../src/doors/location';
 
 const prisma = new PrismaClient();
 
@@ -67,22 +68,21 @@ type Archetype =
 type DoorSeed = {
   rawLocation: string;
   role: DoorRole;
-  zone: string;
+  name: string;
   floor: string;
-  displayName: string;
 };
 
 const DOORS: DoorSeed[] = [
-  { rawLocation: '1\\Panel 1\\Et. 1 Intrare Orion', role: 'IN', zone: 'Orion', floor: '1', displayName: 'Orion entry' },
-  { rawLocation: '1\\Panel 1\\Et. 1 Iesire Orion', role: 'OUT', zone: 'Orion', floor: '1', displayName: 'Orion exit' },
-  { rawLocation: '2\\Panel 1\\Et. 2 Intrare Drivenets', role: 'IN', zone: 'Drivenets', floor: '2', displayName: 'Drivenets entry' },
-  { rawLocation: '2\\Panel 1\\Et. 2 Iesire Drivenets', role: 'OUT', zone: 'Drivenets', floor: '2', displayName: 'Drivenets exit' },
-  { rawLocation: '3\\Panel 1\\Et. 3 Intrare Administrativ', role: 'IN', zone: 'Administrativ', floor: '3', displayName: 'Admin entry' },
-  { rawLocation: '3\\Panel 1\\Et. 3 Iesire Administrativ', role: 'OUT', zone: 'Administrativ', floor: '3', displayName: 'Admin exit' },
-  { rawLocation: '4\\Panel 1\\Et. 4 Intrare fata Drivenets', role: 'IN', zone: 'Drivenets', floor: '4', displayName: 'Drivenets front entry' },
-  { rawLocation: '4\\Panel 1\\Et. 4 Iesire fata Drivenets', role: 'OUT', zone: 'Drivenets', floor: '4', displayName: 'Drivenets front exit' },
-  { rawLocation: '1\\Panel 2\\Parter Cantina', role: 'NEUTRAL', zone: 'Cafeteria', floor: '0', displayName: 'Cafeteria' },
-  { rawLocation: '1\\Panel 2\\Parter Parcare', role: 'NEUTRAL', zone: 'Parking', floor: '0', displayName: 'Parking' },
+  { rawLocation: '1\\Panel 1\\Et. 1 Intrare Orion', role: 'IN', name: 'Orion', floor: 'Et. 1' },
+  { rawLocation: '1\\Panel 1\\Et. 1 Iesire Orion', role: 'OUT', name: 'Orion', floor: 'Et. 1' },
+  { rawLocation: '2\\Panel 1\\Et. 2 Intrare Drivenets', role: 'IN', name: 'Drivenets', floor: 'Et. 2' },
+  { rawLocation: '2\\Panel 1\\Et. 2 Iesire Drivenets', role: 'OUT', name: 'Drivenets', floor: 'Et. 2' },
+  { rawLocation: '3\\Panel 1\\Et. 3 Intrare Administrativ', role: 'IN', name: 'Administrativ', floor: 'Et. 3' },
+  { rawLocation: '3\\Panel 1\\Et. 3 Iesire Administrativ', role: 'OUT', name: 'Administrativ', floor: 'Et. 3' },
+  { rawLocation: '4\\Panel 1\\Et. 4 Intrare fata Drivenets', role: 'IN', name: 'Drivenets', floor: 'Et. 4' },
+  { rawLocation: '4\\Panel 1\\Et. 4 Iesire fata Drivenets', role: 'OUT', name: 'Drivenets', floor: 'Et. 4' },
+  { rawLocation: '1\\Panel 2\\Parter Cantina', role: 'NEUTRAL', name: 'Cafeteria', floor: 'Parter' },
+  { rawLocation: '1\\Panel 2\\Parter Parcare', role: 'NEUTRAL', name: 'Parking', floor: 'Parter' },
 ];
 
 const HOLIDAYS: { date: string; name: string }[] = [
@@ -206,7 +206,7 @@ function pairForZone(doors: DoorRow[], zone: string): { inn: DoorRow; out: DoorR
 
 type PlannedEvent = {
   employeeId: number;
-  doorId: number;
+  readerId: number;
   occurredAt: Date;
   direction: DoorRole;
   eventType: EventType;
@@ -223,7 +223,7 @@ function pushEv(
 ) {
   events.push({
     employeeId,
-    doorId: door.id,
+    readerId: door.id,
     occurredAt,
     direction: door.role,
     eventType,
@@ -365,22 +365,44 @@ async function main() {
     });
   }
 
-  await prisma.door.createMany({
-    data: DOORS.map((d) => ({
-      rawLocation: d.rawLocation,
-      role: d.role,
-      zone: d.zone,
-      floor: d.floor,
-      displayName: d.displayName,
-      autoDetected: false,
-      readerNo: null,
-      panel: d.rawLocation.split('\\')[1] ?? null,
-    })),
-    skipDuplicates: true,
+  const office = await prisma.office.upsert({
+    where: { name: 'HQ' },
+    create: { name: 'HQ' },
+    update: {},
   });
-  const doorRows = (await prisma.door.findMany({
-    where: { rawLocation: { in: DOORS.map((d) => d.rawLocation) } },
-  })).map((d) => ({ id: d.id, role: d.role, zone: d.zone }));
+
+  for (const d of DOORS) {
+    const parsed = parseLocation(d.rawLocation);
+    const groupingKey = doorGroupingKey(d.name, d.floor);
+    const door = await prisma.door.upsert({
+      where: { groupingKey },
+      create: {
+        name: d.name,
+        floor: d.floor,
+        groupingKey,
+        officeId: office.id,
+      },
+      update: { name: d.name, floor: d.floor, officeId: office.id },
+    });
+    await prisma.reader.upsert({
+      where: { rawLocation: d.rawLocation },
+      create: {
+        rawLocation: d.rawLocation,
+        role: d.role,
+        autoDetected: false,
+        readerNo: parsed.readerNo,
+        panel: parsed.panel,
+        doorId: door.id,
+      },
+      update: { role: d.role, doorId: door.id },
+    });
+  }
+  const doorRows = (
+    await prisma.reader.findMany({
+      where: { rawLocation: { in: DOORS.map((d) => d.rawLocation) } },
+      include: { door: true },
+    })
+  ).map((r) => ({ id: r.id, role: r.role, zone: r.door.name }));
   const cafeteria = doorRows.find((d) => d.role === 'NEUTRAL' && d.zone === 'Cafeteria');
 
   const batch = await prisma.importBatch.create({
@@ -610,7 +632,7 @@ async function main() {
     const employeeId = Number(empIdStr);
     const result = computeDay(
       dayEvents.map((ev) => {
-        const door = doorById.get(ev.doorId)!;
+        const door = doorById.get(ev.readerId)!;
         return {
           occurredAt: ev.occurredAt,
           role: door.role,

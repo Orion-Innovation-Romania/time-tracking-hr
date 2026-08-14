@@ -187,10 +187,7 @@ export class MailService {
       );
     }
 
-    const who =
-      file.scopeLabel === 'all employees'
-        ? 'all employees'
-        : `employee ${file.scopeLabel}`;
+    const who = file.scopeLabel;
 
     await this.send({
       to: recipients,

@@ -146,21 +146,45 @@ model EmployeeSchedule {
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 }
 
+model Office {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  doors     Door[]
+}
+
+/// Physical door. One door can have one or two readers (entry / exit).
 model Door {
+  id          Int      @id @default(autoincrement())
+  name        String
+  /// Stable key from PDF parse (name+floor) so new readers still attach after rename.
+  groupingKey String   @unique
+  officeId    Int?
+  floor       String?
+  createdAt   DateTime @default(now())
+
+  office  Office?  @relation(fields: [officeId], references: [id], onDelete: SetNull)
+  readers Reader[]
+
+  @@index([officeId])
+  @@index([name])
+}
+
+/// Badge reader discovered from AxTrax (`3\Panel 1\Et. 4 Intrare…`).
+model Reader {
   id           Int      @id @default(autoincrement())
+  doorId       Int
   rawLocation  String   @unique
   readerNo     Int?
   panel        String?
-  floor        String?
-  zone         String?
   role         DoorRole @default(NEUTRAL)
-  displayName  String?
   autoDetected Boolean  @default(true)
   createdAt    DateTime @default(now())
 
+  door   Door          @relation(fields: [doorId], references: [id], onDelete: Cascade)
   events AccessEvent[]
 
-  @@index([zone])
+  @@index([doorId])
 }
 
 model ImportBatch {
@@ -189,17 +213,17 @@ model ImportBatch {
 model AccessEvent {
   id            Int       @id @default(autoincrement())
   employeeId    Int
-  doorId        Int
+  readerId      Int
   occurredAt    DateTime
   direction     DoorRole
   eventType     EventType @default(ACCESS_GRANTED)
   importBatchId Int?
 
   employee    Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  door        Door         @relation(fields: [doorId], references: [id], onDelete: Cascade)
+  reader      Reader       @relation(fields: [readerId], references: [id], onDelete: Cascade)
   importBatch ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
-  @@unique([employeeId, occurredAt, doorId, direction])
+  @@unique([employeeId, occurredAt, readerId, direction])
   @@index([employeeId, occurredAt])
   @@index([occurredAt])
 }

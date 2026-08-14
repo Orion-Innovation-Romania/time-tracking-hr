@@ -46,3 +46,40 @@ export function monthRange(year: number, month: number): { from: string; to: str
   const to = `${year}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
   return { from, to };
 }
+
+export function currentYearMonth(): { year: number; month: number } {
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
+export function currentMonthRange(): { from: string; to: string } {
+  const { year, month } = currentYearMonth();
+  return monthRange(year, month);
+}
+
+export function ymKey(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
+
+export function parseYm(value: string): { year: number; month: number } | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(value.slice(0, 7));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+export function isCurrentMonth(year: number, month: number): boolean {
+  const now = currentYearMonth();
+  return now.year === year && now.month === month;
+}
+
+export function shiftMonth(
+  year: number,
+  month: number,
+  delta: number,
+): { year: number; month: number } {
+  const date = new Date(Date.UTC(year, month - 1 + delta, 1));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+}

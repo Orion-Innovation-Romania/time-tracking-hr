@@ -4,7 +4,8 @@ import { formatClock, formatMinutes } from './utils';
 
 function doorAt(ev: DayAccessEventView): string {
   const door = ev.doorLabel.trim() || 'unknown door';
-  return ev.zone ? `${door} (${ev.zone})` : door;
+  if (ev.zone && ev.zone !== door) return `${door} (${ev.zone})`;
+  return door;
 }
 
 /** Concrete bullets for the selected flag, derived from the day's annotated events. */

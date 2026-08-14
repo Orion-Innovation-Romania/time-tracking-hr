@@ -15,10 +15,10 @@ import {
   type MetricKey,
 } from '@ttah/shared';
 import { api, apiDownload, ApiRequestError } from '@/lib/api';
-import { monthRange } from '@/lib/utils';
+import { currentMonthRange } from '@/lib/utils';
 import { METRIC_LABELS, KIND_LABELS } from '@/lib/labels';
 import { useEmployees } from '@/lib/hooks';
-import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
+import { DateRangePicker, isIsoDate, type DateRange } from '@/components/date-range-picker';
 import { EmployeePicker } from '@/components/employee-picker';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
@@ -56,8 +56,7 @@ interface TemplateRecord {
 }
 
 function defaultRange(): DateRange {
-  const now = new Date();
-  return monthRange(now.getFullYear(), now.getMonth() + 1);
+  return currentMonthRange();
 }
 
 function builtinValue(kind: ExportKind) {
@@ -294,13 +293,15 @@ export default function ExportsPage() {
   };
 
   const availability = useQuery({
-    queryKey: ['export-availability', exportFilter],
-    queryFn: () =>
+    queryKey: ['export-availability', range.from, range.to, employeeIds.slice().sort((a, b) => a - b).join(',')],
+    queryFn: ({ signal }) =>
       api<ExportAvailability>('/exports/availability', {
         method: 'POST',
         body: { filter: exportFilter },
+        signal,
       }),
-    enabled: Boolean(range.from && range.to),
+    enabled: isIsoDate(range.from) && isIsoDate(range.to),
+    placeholderData: (prev) => prev,
   });
 
   const noData = availability.data?.hasData === false;
@@ -370,7 +371,7 @@ export default function ExportsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Generate export</CardTitle>
-          <CardDescription>Pick a range, people and template, then download.</CardDescription>
+          <CardDescription>Pick a month, people and template, then download.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <DateRangePicker value={range} onChange={setRange} />
@@ -423,7 +424,7 @@ export default function ExportsPage() {
           {noData && (
             <div className="flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
               <TriangleAlert className="h-4 w-4 shrink-0" />
-              No data in this interval.
+              No data in this month.
             </div>
           )}
           {mailPolicy.data?.sendByDefault && mailPolicy.data.canSend && !noData && (
@@ -433,7 +434,7 @@ export default function ExportsPage() {
           )}
           <span
             className="inline-flex"
-            title={noData ? 'No data in this interval' : undefined}
+            title={noData ? 'No data in this month' : undefined}
           >
             <Button
               onClick={() => generate.mutate()}

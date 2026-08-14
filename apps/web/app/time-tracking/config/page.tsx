@@ -17,8 +17,9 @@ import {
   type ThresholdConfig,
 } from '@ttah/shared';
 import { api } from '@/lib/api';
-import { formatDate, monthRange } from '@/lib/utils';
+import { currentMonthRange, formatDate } from '@/lib/utils';
 import { CONDITION_LABELS, LEAVE_LABELS } from '@/lib/labels';
+import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
 import { useEmployees } from '@/lib/hooks';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
@@ -482,7 +483,7 @@ function LeavesTab() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const employees = useEmployees();
-  const range = monthRange(new Date().getFullYear(), new Date().getMonth() + 1);
+  const [range, setRange] = useState<DateRange>(currentMonthRange);
 
   const leaves = useQuery({
     queryKey: ['leaves', range.from, range.to],
@@ -521,9 +522,10 @@ function LeavesTab() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Leaves (this month)</CardTitle>
+        <CardTitle>Leaves</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <DateRangePicker value={range} onChange={setRange} />
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs">Employee</Label>
@@ -613,12 +615,11 @@ function LeavesTab() {
 function RecomputeCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const range = monthRange(new Date().getFullYear(), new Date().getMonth() + 1);
-  const [from, setFrom] = useState(range.from);
-  const [to, setTo] = useState(range.to);
+  const [range, setRange] = useState<DateRange>(currentMonthRange);
 
   const recompute = useMutation({
-    mutationFn: () => api('/attendance/recompute', { method: 'POST', body: { from, to } }),
+    mutationFn: () =>
+      api('/attendance/recompute', { method: 'POST', body: { from: range.from, to: range.to } }),
     onSuccess: () => {
       toast({ title: 'Recompute complete', variant: 'success' });
       queryClient.invalidateQueries({ queryKey: ['summaries'] });
@@ -636,21 +637,14 @@ function RecomputeCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs">From</Label>
-          <Input type="date" className="w-40" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">To</Label>
-          <Input type="date" className="w-40" value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
+        <DateRangePicker value={range} onChange={setRange} />
         <Button onClick={() => recompute.mutate()} disabled={recompute.isPending}>
           {recompute.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <RefreshCw className="h-4 w-4" />
           )}
-          Recompute range
+          Recompute month
         </Button>
       </CardContent>
     </Card>

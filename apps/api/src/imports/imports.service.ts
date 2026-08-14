@@ -48,7 +48,7 @@ export class ImportsService {
     }
 
     const rawLocations = [...new Set(report.records.map((r) => r.rawLocation))];
-    const existing = await this.prisma.door.findMany({
+    const existing = await this.prisma.reader.findMany({
       where: { rawLocation: { in: rawLocations } },
       select: { rawLocation: true },
     });
@@ -62,7 +62,7 @@ export class ImportsService {
           readerNo: parsed.readerNo,
           panel: parsed.panel,
           floor: parsed.floor,
-          zone: parsed.zone,
+          suggestedName: parsed.suggestedName,
           suggestedRole: parsed.suggestedRole,
         };
       });
@@ -84,7 +84,7 @@ export class ImportsService {
         rawLocation: r.rawLocation,
         direction: r.direction,
         eventType: r.eventType,
-        zone: parsed.zone,
+        zone: parsed.suggestedName,
         floor: parsed.floor,
       };
     });
@@ -132,11 +132,11 @@ export class ImportsService {
     const employeeId = await this.resolveCommitEmployee(input, entry);
 
     const rawLocations = [...new Set(entry.report.records.map((r) => r.rawLocation))];
-    const doorMap = new Map<string, { id: number; role: 'IN' | 'OUT' | 'NEUTRAL' }>();
+    const readerMap = new Map<string, { id: number; role: 'IN' | 'OUT' | 'NEUTRAL' }>();
     for (const loc of rawLocations) {
-      const door = await this.doors.resolveDoor(loc);
-      if (!door) continue;
-      doorMap.set(loc, { id: door.id, role: door.role });
+      const reader = await this.doors.resolveReader(loc);
+      if (!reader) continue;
+      readerMap.set(loc, { id: reader.id, role: reader.role });
     }
 
     const batch = await this.prisma.importBatch.create({
@@ -154,14 +154,14 @@ export class ImportsService {
     });
 
     const rows = entry.report.records.flatMap((r) => {
-      const door = doorMap.get(r.rawLocation);
-      if (!door) return [];
+      const reader = readerMap.get(r.rawLocation);
+      if (!reader) return [];
       return [
         {
           employeeId,
-          doorId: door.id,
+          readerId: reader.id,
           occurredAt: r.occurredAt,
-          direction: door.role,
+          direction: reader.role,
           eventType: r.eventType,
           importBatchId: batch.id,
         },

@@ -120,13 +120,23 @@ export const employeeScheduleSchema = z.object({
 });
 export type EmployeeScheduleInput = z.infer<typeof employeeScheduleSchema>;
 
-// --- doors ---
+// --- doors / readers / offices ---
+export const officeCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+});
+export type OfficeCreateInput = z.infer<typeof officeCreateSchema>;
+
 export const doorUpdateSchema = z.object({
-  role: z.enum(DOOR_ROLES).optional(),
-  displayName: z.string().max(120).nullable().optional(),
-  zone: z.string().max(120).nullable().optional(),
+  name: z.string().trim().min(1).max(120).optional(),
+  officeId: z.number().int().positive().nullable().optional(),
+  floor: z.string().trim().max(40).nullable().optional(),
 });
 export type DoorUpdateInput = z.infer<typeof doorUpdateSchema>;
+
+export const readerUpdateSchema = z.object({
+  role: z.enum(DOOR_ROLES).optional(),
+});
+export type ReaderUpdateInput = z.infer<typeof readerUpdateSchema>;
 
 // --- conditions ---
 export const conditionRuleSchema = z.object({

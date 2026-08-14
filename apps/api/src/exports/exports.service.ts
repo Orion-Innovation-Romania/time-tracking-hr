@@ -160,12 +160,14 @@ export class ExportsService {
     if (!employeeIds?.length) {
       return { label: 'all employees', slug: '' };
     }
-    if (employeeIds.length === 1) {
-      const employee = await this.prisma.employee.findUnique({ where: { id: employeeIds[0] } });
-      const name = employee?.displayName?.trim() || `employee-${employeeIds[0]}`;
-      return { label: name, slug: slugFilename(name) };
-    }
-    return { label: `${employeeIds.length} employees`, slug: `${employeeIds.length}-employees` };
+    const rows = await this.prisma.employee.findMany({
+      where: { id: { in: employeeIds } },
+      select: { id: true, displayName: true },
+    });
+    const byId = new Map(rows.map((e) => [e.id, e.displayName.trim() || `employee-${e.id}`]));
+    const names = employeeIds.map((id) => byId.get(id) ?? `employee-${id}`);
+    const label = names.join(' · ');
+    return { label, slug: slugFilename(names.slice(0, 3).join('-')) };
   }
 
   private async resolveKindAndLayout(

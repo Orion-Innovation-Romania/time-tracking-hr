@@ -178,8 +178,18 @@ export function DayInsightDialog({
                       <div className="min-w-0 flex-1 pb-1">
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className="font-mono text-sm tabular-nums">{ev.time}</span>
-                          <span className="text-sm font-medium">{DOOR_ROLE_LABELS[ev.role]}</span>
-                          <span className="truncate text-sm text-muted-foreground">{ev.doorLabel}</span>
+                          <span className="truncate text-sm font-medium">{ev.doorLabel}</span>
+                          <Badge
+                            variant={
+                              ev.role === 'IN' ? 'success' : ev.role === 'OUT' ? 'warning' : 'secondary'
+                            }
+                            className="h-5 justify-center px-1.5 text-[10px]"
+                          >
+                            {DOOR_ROLE_LABELS[ev.role]}
+                          </Badge>
+                          {ev.zone ? (
+                            <span className="text-xs text-muted-foreground">{ev.zone}</span>
+                          ) : null}
                           <span className="text-xs text-muted-foreground">
                             → {ev.insideAfter ? 'inside' : 'outside'}
                           </span>

@@ -97,12 +97,20 @@ async function request(url: string, init: RequestInit): Promise<Response> {
   try {
     return await fetch(url, init);
   } catch (err) {
+    if (isAbortError(err)) throw err;
     throw new ApiRequestError({
       statusCode: 0,
       message: UNAVAILABLE_MESSAGE,
       raw: err,
     });
   }
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === 'AbortError') ||
+    (err instanceof Error && err.name === 'AbortError')
+  );
 }
 
 /** One in-flight refresh so parallel 401s don't rotate the token twice. */

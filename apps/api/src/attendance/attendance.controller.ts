@@ -78,11 +78,6 @@ export class AttendanceController {
     return this.attendance.recomputeAll(body.from, body.to, body.employeeIds);
   }
 
-  @Get('door-health')
-  doorHealth(@Query('from') from: string, @Query('to') to: string) {
-    return this.attendance.getDoorHealth(dateString.parse(from), dateString.parse(to));
-  }
-
   @Post('correction')
   correction(
     @Body(new ZodValidationPipe(dayCorrectionSchema)) body: DayCorrectionInput,

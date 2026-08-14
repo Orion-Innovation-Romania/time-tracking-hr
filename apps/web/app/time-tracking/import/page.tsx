@@ -199,7 +199,7 @@ export default function ImportPage() {
                 </p>
               </div>
               <div className="rounded-lg border p-4">
-                <p className="text-xs text-muted-foreground">New doors</p>
+                <p className="text-xs text-muted-foreground">New readers</p>
                 <p className="text-2xl font-bold">{preview.newDoors.length}</p>
               </div>
               <div className="rounded-lg border p-4">
@@ -271,21 +271,20 @@ export default function ImportPage() {
 
             {preview.newDoors.length > 0 && (
               <div>
-                <p className="mb-2 text-sm font-medium">Newly discovered doors</p>
+                <p className="mb-2 text-sm font-medium">Newly discovered readers</p>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Location</TableHead>
-                      <TableHead>Zone</TableHead>
+                      <TableHead>Door</TableHead>
                       <TableHead>Floor</TableHead>
-                      <TableHead>Suggested role</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>AxTrax location</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {preview.newDoors.map((d) => (
                       <TableRow key={d.rawLocation}>
-                        <TableCell className="font-mono text-xs">{d.rawLocation}</TableCell>
-                        <TableCell>{d.zone ?? '—'}</TableCell>
+                        <TableCell className="font-medium">{d.suggestedName}</TableCell>
                         <TableCell>{d.floor ?? '—'}</TableCell>
                         <TableCell>
                           <Badge
@@ -293,13 +292,18 @@ export default function ImportPage() {
                               d.suggestedRole === 'IN'
                                 ? 'success'
                                 : d.suggestedRole === 'OUT'
-                                  ? 'default'
+                                  ? 'warning'
                                   : 'secondary'
                             }
                           >
-                            {d.suggestedRole}
+                            {d.suggestedRole === 'IN'
+                              ? 'Entry'
+                              : d.suggestedRole === 'OUT'
+                                ? 'Exit'
+                                : 'Neutral'}
                           </Badge>
                         </TableCell>
+                        <TableCell className="font-mono text-xs">{d.rawLocation}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

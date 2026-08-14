@@ -34,31 +34,31 @@ export interface EmployeeView {
   aliases?: string[];
 }
 
-export interface DoorView {
+export interface OfficeView {
   id: number;
+  name: string;
+}
+
+export interface ReaderView {
+  id: number;
+  doorId: number;
   rawLocation: string;
   readerNo: number | null;
   panel: string | null;
-  floor: string | null;
-  zone: string | null;
   role: DoorRole;
-  displayName: string | null;
   autoDetected: boolean;
-  eventCount?: number;
-  valid?: boolean;
+  eventCount: number;
+  valid: boolean;
 }
 
-/** Per-door anomaly attribution over a date range (misclassification signal). */
-export interface DoorHealthView {
-  doorId: number;
-  rawLocation: string;
-  displayName: string | null;
-  zone: string | null;
-  role: DoorRole;
-  events: number; // access-granted reads in range
-  activeDays: number; // distinct employee-days this door was used
-  problems: number; // employee-days where this door caused a missing entry/exit
-  anomalyRatePct: number; // problems / activeDays, 0-100
+export interface DoorView {
+  id: number;
+  name: string;
+  floor: string | null;
+  officeId: number | null;
+  officeName: string | null;
+  eventCount: number;
+  readers: ReaderView[];
 }
 
 export interface ParsedEventRow {
@@ -75,7 +75,7 @@ export interface DiscoveredDoor {
   readerNo: number | null;
   panel: string | null;
   floor: string | null;
-  zone: string | null;
+  suggestedName: string;
   suggestedRole: DoorRole;
 }
 

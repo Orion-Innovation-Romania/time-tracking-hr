@@ -8,7 +8,6 @@ import {
   type DayDetailView,
   type DashboardKpis,
   type DayCorrectionInput,
-  type DoorHealthView,
   type MonthAggregateView,
   type TrendPoint,
   type ZoneBreakdown,
@@ -159,15 +158,15 @@ export class AttendanceService {
     const dayEnd = addDays(dayStart, 1);
     const rows = await this.prisma.accessEvent.findMany({
       where: { employeeId, occurredAt: { gte: dayStart, lt: dayEnd } },
-      include: { door: true },
+      include: { reader: { include: { door: true } } },
       orderBy: { occurredAt: 'asc' },
     });
     return rows.map((row) => ({
       occurredAt: row.occurredAt,
-      role: row.door.role,
-      zone: row.door.zone,
+      role: row.reader.role,
+      zone: row.reader.door.name,
       eventType: row.eventType,
-      doorId: row.doorId,
+      doorId: row.readerId,
     }));
   }
 
@@ -227,7 +226,7 @@ export class AttendanceService {
       this.prisma.employeeSchedule.findUnique({ where: { employeeId } }),
       this.prisma.accessEvent.findMany({
         where: { employeeId, occurredAt: { gte: dayStart, lt: addDays(dayStart, 1) } },
-        include: { door: true },
+        include: { reader: { include: { door: { include: { office: true } } } } },
         orderBy: { occurredAt: 'asc' },
       }),
     ]);
@@ -237,10 +236,10 @@ export class AttendanceService {
     const annotated = annotateDayEvents(
       eventRows.map((ev) => ({
         occurredAt: ev.occurredAt,
-        role: ev.door.role,
+        role: ev.reader.role,
         eventType: ev.eventType,
-        doorLabel: ev.door.displayName?.trim() || ev.door.rawLocation,
-        zone: ev.door.zone,
+        doorLabel: ev.reader.door.name,
+        zone: ev.reader.door.office?.name ?? ev.reader.door.floor,
       })),
     );
 
@@ -308,85 +307,6 @@ export class AttendanceService {
     };
 
     return { kpis, trend, zones };
-  }
-
-  async getDoorHealth(from: string, to: string): Promise<DoorHealthView[]> {
-    const cfg = await this.loadConfig();
-    const fromDate = dateOnly(from);
-    const toExclusive = addDays(dateOnly(to), 1);
-
-    const employees = await this.prisma.employee.findMany({ include: { schedule: true } });
-    const eventCounts = new Map<number, number>();
-    const activeDays = new Map<number, number>();
-    const problemDays = new Map<number, number>();
-
-    for (const emp of employees) {
-      const rows = await this.prisma.accessEvent.findMany({
-        where: { employeeId: emp.id, occurredAt: { gte: fromDate, lt: toExclusive } },
-        include: { door: true },
-        orderBy: { occurredAt: 'asc' },
-      });
-      if (rows.length === 0) continue;
-      const eff = this.effectiveSchedule(cfg, emp.schedule ?? null);
-
-      const byDay = new Map<string, typeof rows>();
-      for (const row of rows) {
-        if (row.eventType === 'ACCESS_GRANTED') {
-          eventCounts.set(row.doorId, (eventCounts.get(row.doorId) ?? 0) + 1);
-        }
-        const key = dayKey(row.occurredAt);
-        const bucket = byDay.get(key);
-        if (bucket) bucket.push(row);
-        else byDay.set(key, [row]);
-      }
-
-      for (const [key, dayRows] of byDay) {
-        const doorsToday = new Set<number>();
-        const engineEvents: EngineEvent[] = dayRows.map((row) => {
-          doorsToday.add(row.doorId);
-          return {
-            occurredAt: row.occurredAt,
-            role: row.door.role,
-            zone: row.door.zone,
-            eventType: row.eventType,
-            doorId: row.doorId,
-          };
-        });
-        for (const id of doorsToday) activeDays.set(id, (activeDays.get(id) ?? 0) + 1);
-
-        const result = computeDay(engineEvents, {
-          dayKey: key,
-          schedule: eff.schedule,
-          lunch: cfg.lunch,
-          thresholds: cfg.thresholds,
-          conditions: cfg.conditions,
-        });
-        for (const id of result.problemDoorIds) {
-          problemDays.set(id, (problemDays.get(id) ?? 0) + 1);
-        }
-      }
-    }
-
-    const doors = await this.prisma.door.findMany();
-    return doors
-      .map((door) => {
-        const events = eventCounts.get(door.id) ?? 0;
-        const active = activeDays.get(door.id) ?? 0;
-        const problems = problemDays.get(door.id) ?? 0;
-        return {
-          doorId: door.id,
-          rawLocation: door.rawLocation,
-          displayName: door.displayName,
-          zone: door.zone,
-          role: door.role,
-          events,
-          activeDays: active,
-          problems,
-          anomalyRatePct: active ? Math.round((problems / active) * 100) : 0,
-        };
-      })
-      .filter((d) => d.events > 0)
-      .sort((a, b) => b.problems - a.problems || b.anomalyRatePct - a.anomalyRatePct);
   }
 
   async getMonthAggregates(

@@ -5,7 +5,8 @@ export interface ParsedLocation {
   readerNo: number | null;
   panel: string | null;
   floor: string | null;
-  zone: string | null;
+  /** Suggested physical-door name (direction words and floor stripped). */
+  suggestedName: string;
   suggestedRole: DoorRole;
 }
 
@@ -28,10 +29,15 @@ export function isValidAxTraxLocation(rawLocation: string): boolean {
   return loc.split('\\').length === 3;
 }
 
+/** Stable key so entry/exit readers of the same door keep grouping after rename. */
+export function doorGroupingKey(name: string, floor: string | null): string {
+  return `${name.trim().toLowerCase()}|${(floor ?? '').trim().toLowerCase()}`;
+}
+
 /**
  * Parse an AxTraxNG location such as "3\\Panel 1\\Et. 4 Intrare fata Drivenets".
- * Direction is inferred from the Intrare/Iesire keyword; a rough zone label is
- * derived for grouping (HR can override role/zone later in the door registry).
+ * Direction is inferred from the Intrare/Iesire keyword; the remaining text is
+ * the suggested door name (HR can override name / office / floor later).
  */
 export function parseLocation(rawLocation: string): ParsedLocation {
   const parts = rawLocation.split('\\').map((p) => p.trim());
@@ -41,25 +47,27 @@ export function parseLocation(rawLocation: string): ParsedLocation {
   const descriptor = (parts.length >= 3 ? parts[2] : parts[parts.length - 1]) ?? '';
 
   const floorMatch = /Et\.?\s*(\d+)/i.exec(descriptor);
-  const floor = floorMatch ? `Et. ${floorMatch[1]}` : null;
+  let floor: string | null = floorMatch ? `Et. ${floorMatch[1]}` : null;
+  if (!floor && /\bparter\b/i.test(descriptor)) floor = 'Parter';
 
   const lower = descriptor.toLowerCase();
   const isIn = DIRECTION_KEYWORDS.in.some((kw) => lower.includes(kw));
   const isOut = DIRECTION_KEYWORDS.out.some((kw) => lower.includes(kw));
   const suggestedRole: DoorRole = isIn ? 'IN' : isOut ? 'OUT' : 'NEUTRAL';
 
-  let zone = descriptor;
-  if (floorMatch) zone = zone.replace(floorMatch[0], '');
+  let name = descriptor;
+  if (floorMatch) name = name.replace(floorMatch[0], '');
+  if (floor === 'Parter') name = name.replace(/\bparter\b/i, '');
   for (const kw of [...DIRECTION_KEYWORDS.in, ...DIRECTION_KEYWORDS.out]) {
-    zone = zone.replace(new RegExp(kw, 'i'), '');
+    name = name.replace(new RegExp(kw, 'i'), '');
   }
-  zone = zone.replace(/\s+/g, ' ').trim();
+  name = name.replace(/\s+/g, ' ').trim();
 
   return {
     readerNo,
     panel,
     floor,
-    zone: zone || descriptor.trim() || null,
+    suggestedName: name || descriptor.trim() || 'Unnamed',
     suggestedRole,
   };
 }
