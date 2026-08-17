@@ -20,6 +20,16 @@ import { api } from '@/lib/api';
 import { currentMonthRange, formatDate } from '@/lib/utils';
 import { CONDITION_LABELS, LEAVE_LABELS } from '@/lib/labels';
 import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
+import DateField from '@/components/date-field';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from '@/components/ui/dialog';
 import { useEmployees } from '@/lib/hooks';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
@@ -404,9 +414,19 @@ function HolidaysTab() {
   });
   const [date, setDate] = useState('');
   const [name, setName] = useState('');
+  const [confirmHoliday, setConfirmHoliday] = useState<HolidayView | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const toIso = (d: string) => {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    // If already in YYYY-MM-DD, return as-is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    return d;
+  };
 
   const add = useMutation({
-    mutationFn: () => api('/config/holidays', { method: 'POST', body: { date, name } }),
+    mutationFn: () => api('/config/holidays', { method: 'POST', body: { date: toIso(date), name } }),
     onSuccess: () => {
       toast({ title: 'Holiday added', variant: 'success' });
       setDate('');
@@ -430,7 +450,7 @@ function HolidaysTab() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs">Date</Label>
-            <Input type="date" className="w-40" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateField className="w-40" value={date} onChange={setDate} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Name</Label>
@@ -465,7 +485,14 @@ function HolidaysTab() {
                   <TableCell className="font-medium">{formatDate(h.date)}</TableCell>
                   <TableCell>{h.name}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => remove.mutate(h.id)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setConfirmHoliday(h);
+                        setConfirmOpen(true);
+                      }}
+                    >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </TableCell>
@@ -474,6 +501,34 @@ function HolidaysTab() {
             </TableBody>
           </Table>
         )}
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete holiday</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete the holiday "{confirmHoliday?.name}" on{' '}
+                {confirmHoliday ? formatDate(confirmHoliday.date) : '—'}? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (confirmHoliday) remove.mutate(confirmHoliday.id);
+                  setConfirmOpen(false);
+                }}
+                disabled={remove.isPending}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
@@ -496,11 +551,18 @@ function LeavesTab() {
   const [type, setType] = useState<LeaveType>('vacation');
   const [note, setNote] = useState('');
 
+  const toIso = (d: string) => {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    return d;
+  };
+
   const add = useMutation({
     mutationFn: () =>
       api('/config/leaves', {
         method: 'POST',
-        body: { employeeId: Number(employeeId), date, type, note: note || null },
+        body: { employeeId: Number(employeeId), date: toIso(date), type, note: note || null },
       }),
     onSuccess: () => {
       toast({ title: 'Leave added', variant: 'success' });
@@ -544,7 +606,7 @@ function LeavesTab() {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Date</Label>
-            <Input type="date" className="w-40" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateField className="w-40" value={date} onChange={setDate} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Type</Label>

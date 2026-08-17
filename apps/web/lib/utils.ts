@@ -28,9 +28,32 @@ export function formatClock(iso: string | null | undefined): string {
   return `${hh}:${mm}`;
 }
 
-export function formatDate(date: string): string {
-  const [y, m, d] = date.split('-');
-  return `${d}/${m}/${y}`;
+export function formatDate(date: string | null | undefined): string {
+  if (!date) return '—';
+  // Accept ISO datetimes (2026-08-04T00:00:00.000Z), plain dates (2026-08-04),
+  // or already formatted dd/mm/yyyy.
+  // If it's already in dd/mm/yyyy, return as-is.
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(date)) return date;
+
+  // Strip time portion if present
+  const dateOnly = date.includes('T') ? date.split('T')[0] : date;
+
+  const parts = dateOnly.split('-');
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+  }
+
+  // Fallback: try parsing with Date
+  const parsed = new Date(date);
+  if (!Number.isNaN(parsed.getTime())) {
+    const dd = String(parsed.getUTCDate()).padStart(2, '0');
+    const mm = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+    const yy = parsed.getUTCFullYear();
+    return `${dd}/${mm}/${yy}`;
+  }
+
+  return String(date);
 }
 
 export function todayKey(): string {
