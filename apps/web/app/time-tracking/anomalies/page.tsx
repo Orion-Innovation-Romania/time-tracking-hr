@@ -9,6 +9,8 @@ import { currentMonthRange, formatClock, formatDate, formatMinutes } from '@/lib
 import { FLAG_LABELS, FLAG_DESCRIPTIONS } from '@/lib/labels';
 import { DateRangePicker, isIsoDate, type DateRange } from '@/components/date-range-picker';
 import { DayInsightDialog, FlagBadgeButton } from '@/components/day-insight-dialog';
+import { EmployeeSearchSelect } from '@/components/employee-search-select';
+import { useEmployees } from '@/lib/hooks';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,7 +50,7 @@ function CorrectionDialog({
   const { toast } = useToast();
   const [worked, setWorked] = useState(String(row.workedMinutes));
   const [lunch, setLunch] = useState(String(row.lunchMinutes));
-  const [reason, setReason] = useState('');
+  const [reason, setReason] = useState(row.manualReason ?? '');
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['summaries'] });
@@ -172,8 +174,19 @@ export default function AnomaliesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [range, setRange] = useState<DateRange>(defaultRange);
+  const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [editing, setEditing] = useState<DailySummaryView | null>(null);
   const [insight, setInsight] = useState<{ row: DailySummaryView; flag: AnomalyFlag } | null>(null);
+
+  const employees = useEmployees(true);
+  const scopedKey = useMemo(
+    () => [...employeeIds].sort((a, b) => a - b).join(','),
+    [employeeIds],
+  );
+  const scopedIds = useMemo(
+    () => (scopedKey ? scopedKey.split(',').map(Number) : []),
+    [scopedKey],
+  );
 
   const deleteDay = useMutation({
     mutationFn: (row: DailySummaryView) =>
@@ -189,9 +202,13 @@ export default function AnomaliesPage() {
     onError: () => toast({ title: 'Could not delete hours', variant: 'error' }),
   });
 
-  const filter: AttendanceFilter = { from: range.from, to: range.to };
+  const filter: AttendanceFilter = {
+    from: range.from,
+    to: range.to,
+    ...(scopedIds.length ? { employeeIds: scopedIds } : {}),
+  };
   const summaries = useQuery({
-    queryKey: ['summaries', range.from, range.to],
+    queryKey: ['summaries', range.from, range.to, scopedKey],
     queryFn: ({ signal }) =>
       api<DailySummaryView[]>('/attendance/summaries', { method: 'POST', body: filter, signal }),
     enabled: isIsoDate(range.from) && isIsoDate(range.to),
@@ -220,6 +237,14 @@ export default function AnomaliesPage() {
         <DateRangePicker value={range} onChange={setRange} />
       </div>
 
+      <EmployeeSearchSelect
+        employees={employees.data ?? []}
+        selectedIds={employeeIds}
+        onChange={setEmployeeIds}
+        placeholder="Search to filter by person…"
+        selectedBadge={(n) => `Filtered to ${n} ${n === 1 ? 'person' : 'people'}`}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>What the flags mean</CardTitle>
@@ -245,7 +270,9 @@ export default function AnomaliesPage() {
             <Skeleton className="h-48 w-full" />
           ) : flagged.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
-              No anomalies in this month. 🎉
+              {employeeIds.length
+                ? 'No anomalies for the selected people in this month.'
+                : 'No anomalies in this month. 🎉'}
             </p>
           ) : (
             <Table>
@@ -259,6 +286,7 @@ export default function AnomaliesPage() {
                   <TableHead className="text-right">Early</TableHead>
                   <TableHead className="text-right">Overtime</TableHead>
                   <TableHead>Flags</TableHead>
+                  <TableHead>Reason</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -289,6 +317,9 @@ export default function AnomaliesPage() {
                           />
                         ))}
                       </div>
+                    </TableCell>
+                    <TableCell className="max-w-[16rem] whitespace-normal text-sm text-muted-foreground">
+                      {row.manualReason || '—'}
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">

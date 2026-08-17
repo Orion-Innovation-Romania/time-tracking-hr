@@ -96,19 +96,6 @@ export class DoorsController {
     return this.doors.list();
   }
 
-  @Delete('invalid-readers')
-  @Roles('admin')
-  async purgeInvalid(@CurrentUser() user: SessionUser) {
-    const result = await this.doors.purgeInvalid();
-    await this.audit.log({
-      userId: user.id,
-      action: 'purge-invalid',
-      entity: 'Reader',
-      after: result,
-    });
-    return result;
-  }
-
   @Patch(':id')
   @Roles('admin')
   async update(
@@ -127,20 +114,6 @@ export class DoorsController {
     return door;
   }
 
-  @Delete(':id')
-  @Roles('admin')
-  async remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: SessionUser) {
-    const result = await this.doors.removeDoor(id);
-    await this.audit.log({
-      userId: user.id,
-      action: 'delete',
-      entity: 'Door',
-      entityId: id,
-      after: result,
-    });
-    return result;
-  }
-
   @Patch(':doorId/readers/:readerId')
   @Roles('admin')
   async updateReader(
@@ -157,22 +130,5 @@ export class DoorsController {
       after: body,
     });
     return reader;
-  }
-
-  @Delete(':doorId/readers/:readerId')
-  @Roles('admin')
-  async removeReader(
-    @Param('readerId', ParseIntPipe) readerId: number,
-    @CurrentUser() user: SessionUser,
-  ) {
-    const result = await this.doors.removeReader(readerId);
-    await this.audit.log({
-      userId: user.id,
-      action: 'delete',
-      entity: 'Reader',
-      entityId: readerId,
-      after: result,
-    });
-    return result;
   }
 }

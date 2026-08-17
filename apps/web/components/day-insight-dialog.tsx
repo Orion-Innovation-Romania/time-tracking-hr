@@ -130,6 +130,12 @@ export function DayInsightDialog({
             <div className="rounded-lg border border-warning/40 bg-warning/5 p-4 space-y-2">
               <p className="text-sm font-semibold">{FLAG_LABELS[selected]}</p>
               <p className="text-sm text-muted-foreground">{insightSummary(selected)}</p>
+              {selected === 'MANUAL_OVERRIDE' && (detail?.manualReason ?? row.manualReason) ? (
+                <p className="text-sm">
+                  <span className="font-medium">Reason: </span>
+                  {detail?.manualReason ?? row.manualReason}
+                </p>
+              ) : null}
               {detailQuery.isLoading ? (
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />

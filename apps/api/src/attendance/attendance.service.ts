@@ -196,6 +196,7 @@ export class AttendanceService {
       perZone: (row.perZone as Record<string, number>) ?? {},
       flags: (row.flags as AnomalyFlag[]) ?? [],
       manual: row.manual,
+      manualReason: row.manualReason,
       intervals: Array.isArray(row.intervals)
         ? (row.intervals as unknown as DailySummaryView['intervals'])
         : [],

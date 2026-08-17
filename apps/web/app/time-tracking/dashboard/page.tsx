@@ -675,15 +675,20 @@ export default function DashboardPage() {
                       {formatMinutes(row.lunchMinutes)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {row.manual && <Badge variant="secondary">manual</Badge>}
-                        {row.flags.map((f) => (
-                          <FlagBadgeButton
-                            key={f}
-                            flag={f}
-                            onClick={() => setInsight({ row, flag: f })}
-                          />
-                        ))}
+                      <div className="flex flex-col gap-1">
+                        <div className="flex flex-wrap gap-1">
+                          {row.manual && <Badge variant="secondary">manual</Badge>}
+                          {row.flags.map((f) => (
+                            <FlagBadgeButton
+                              key={f}
+                              flag={f}
+                              onClick={() => setInsight({ row, flag: f })}
+                            />
+                          ))}
+                        </div>
+                        {row.manualReason ? (
+                          <p className="max-w-[16rem] text-xs text-muted-foreground">{row.manualReason}</p>
+                        ) : null}
                       </div>
                     </TableCell>
                   </TableRow>

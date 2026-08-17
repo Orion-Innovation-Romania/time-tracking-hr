@@ -110,55 +110,6 @@ export class DoorsService {
     });
   }
 
-  async removeDoor(id: number): Promise<{ ok: true; readersDeleted: number; eventsDeleted: number }> {
-    const door = await this.prisma.door.findUnique({
-      where: { id },
-      include: { readers: { include: { _count: { select: { events: true } } } } },
-    });
-    if (!door) throw new NotFoundException('Door not found');
-    const readersDeleted = door.readers.length;
-    const eventsDeleted = door.readers.reduce((n, r) => n + r._count.events, 0);
-    await this.prisma.door.delete({ where: { id } });
-    return { ok: true, readersDeleted, eventsDeleted };
-  }
-
-  async removeReader(id: number): Promise<{ ok: true; eventsDeleted: number }> {
-    const reader = await this.prisma.reader.findUnique({
-      where: { id },
-      include: { _count: { select: { events: true } } },
-    });
-    if (!reader) throw new NotFoundException('Reader not found');
-    const eventsDeleted = reader._count.events;
-    const doorId = reader.doorId;
-    await this.prisma.reader.delete({ where: { id } });
-    const leftover = await this.prisma.reader.count({ where: { doorId } });
-    if (leftover === 0) await this.prisma.door.delete({ where: { id: doorId } }).catch(() => undefined);
-    return { ok: true, eventsDeleted };
-  }
-
-  async purgeInvalid(): Promise<{ deleted: number; eventsDeleted: number; doorsDeleted: number }> {
-    const rows = await this.prisma.reader.findMany({
-      include: { _count: { select: { events: true } } },
-    });
-    const junk = rows.filter((d) => !isValidAxTraxLocation(d.rawLocation));
-    let eventsDeleted = 0;
-    const doorIds = new Set<number>();
-    for (const reader of junk) {
-      eventsDeleted += reader._count.events;
-      doorIds.add(reader.doorId);
-      await this.prisma.reader.delete({ where: { id: reader.id } });
-    }
-    let doorsDeleted = 0;
-    for (const doorId of doorIds) {
-      const leftover = await this.prisma.reader.count({ where: { doorId } });
-      if (leftover === 0) {
-        await this.prisma.door.delete({ where: { id: doorId } }).catch(() => undefined);
-        doorsDeleted += 1;
-      }
-    }
-    return { deleted: junk.length, eventsDeleted, doorsDeleted };
-  }
-
   private async findOrCreateDoor(name: string, floor: string | null) {
     const groupingKey = doorGroupingKey(name, floor);
     const existing = await this.prisma.door.findUnique({ where: { groupingKey } });

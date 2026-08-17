@@ -1,50 +1,41 @@
 # ============================================================================
-# TTAH user accounts - bootstrap SOURCE for first deploy (synced on API start).
+# TTAH user accounts — kept in sync with Admin → Users.
 # ----------------------------------------------------------------------------
-# On API startup these entries are synced into the database:
-#   * A new username here is created with its initialPassword and is forced to
-#     change it at first login.
-#   * An existing user keeps the password they chose; only role/active sync.
-#   * Removing a user HERE deactivates that config-managed account (data kept).
-#   * Accounts created in Admin → Users are NOT removed by this file.
-#   * "Reset password" (admin) reverts a user to the initialPassword and
-#     forces a change at next login.
-#
-# Prefer creating day-to-day HR accounts from Admin → Users in the UI.
-# Strong passwords recommended (>= 10 chars, mixed).
+# The API updates this file when you create, edit or delete users in the UI.
+# On startup it is synced into the database:
+#   * New usernames are created (must change password on first login).
+#   * Existing users keep the password they chose; profile/role/active refresh.
+#   * Removed usernames are deactivated (data is kept).
+#   * active: false deactivates the account without deleting the YAML entry.
 # ============================================================================
 users:
   - username: admin
     role: admin
+    initialPassword: Admin#Initial1
     firstName: Admin
     lastName: TTAH
     email: admin@localhost
-    initialPassword: "Admin#Initial1"
-
   - username: hr1
     role: user
+    initialPassword: Hr1#Initial1
     firstName: HR
     lastName: One
     email: hr1@localhost
-    initialPassword: "Hr1#Initial1"
-
   - username: hr2
     role: user
+    initialPassword: Hr2#Initial1
     firstName: HR
     lastName: Two
     email: hr2@localhost
-    initialPassword: "Hr2#Initial1"
-
   - username: hr3
     role: user
+    initialPassword: Hr3#Initial1
     firstName: HR
     lastName: Three
     email: hr3@localhost
-    initialPassword: "Hr3#Initial1"
-
   - username: hr4
     role: user
+    initialPassword: Hr4#Initial1
     firstName: HR
     lastName: Four
     email: hr4@localhost
-    initialPassword: "Hr4#Initial1"

@@ -141,6 +141,7 @@ export interface DailySummaryView {
   perZone: Record<string, number>;
   flags: AnomalyFlag[];
   manual: boolean;
+  manualReason: string | null;
   intervals?: DayInterval[];
 }
 

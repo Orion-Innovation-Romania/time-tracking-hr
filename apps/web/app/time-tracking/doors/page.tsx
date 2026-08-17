@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, DoorOpen, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, DoorOpen, Loader2, Plus } from 'lucide-react';
 import { DOOR_ROLES, type DoorRole, type DoorView, type OfficeView, type ReaderView } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { useSession } from '@/lib/session';
@@ -267,8 +267,6 @@ function ReaderTags({ readers }: { readers: ReaderView[] }) {
 }
 
 export default function DoorsPage() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { data: session } = useSession();
   const canEdit = session?.role === 'admin';
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -283,44 +281,6 @@ export default function DoorsPage() {
   const offices = useQuery({
     queryKey: ['offices'],
     queryFn: () => api<OfficeView[]>('/offices'),
-  });
-
-  const removeDoor = useMutation({
-    mutationFn: (id: number) => api(`/doors/${id}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      toast({ title: 'Door deleted', variant: 'success' });
-      invalidateDoors(queryClient);
-      queryClient.invalidateQueries({ queryKey: ['summaries'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    },
-    onError: () => toast({ title: 'Could not delete door', variant: 'error' }),
-  });
-
-  const removeReader = useMutation({
-    mutationFn: ({ doorId, readerId }: { doorId: number; readerId: number }) =>
-      api(`/doors/${doorId}/readers/${readerId}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      toast({ title: 'Reader deleted', variant: 'success' });
-      invalidateDoors(queryClient);
-      queryClient.invalidateQueries({ queryKey: ['summaries'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    },
-    onError: () => toast({ title: 'Could not delete reader', variant: 'error' }),
-  });
-
-  const purgeInvalid = useMutation({
-    mutationFn: () =>
-      api<{ deleted: number; eventsDeleted: number }>('/doors/invalid-readers', { method: 'DELETE' }),
-    onSuccess: (res) => {
-      toast({
-        title: `Removed ${res.deleted} invalid reader${res.deleted === 1 ? '' : 's'}`,
-        variant: 'success',
-      });
-      invalidateDoors(queryClient);
-      queryClient.invalidateQueries({ queryKey: ['summaries'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    },
-    onError: () => toast({ title: 'Could not purge invalid readers', variant: 'error' }),
   });
 
   const floors = useMemo(() => {
@@ -418,39 +378,14 @@ export default function DoorsPage() {
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
-          <div>
-            <CardTitle>Doors</CardTitle>
-            {doors.data && (
-              <CardDescription>
-                {stats.doors} door{stats.doors === 1 ? '' : 's'} · {stats.readers} reader
-                {stats.readers === 1 ? '' : 's'}
-                {stats.invalid ? ` · ${stats.invalid} invalid` : ''}
-              </CardDescription>
-            )}
-          </div>
-          {canEdit && stats.invalid > 0 && (
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={purgeInvalid.isPending}
-              onClick={() => {
-                if (
-                  confirm(
-                    `Delete ${stats.invalid} invalid reader(s)? These are PDF header leftovers, not real doors. Their badge events (if any) are removed too.`,
-                  )
-                ) {
-                  purgeInvalid.mutate();
-                }
-              }}
-            >
-              {purgeInvalid.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              Delete invalid readers
-            </Button>
+        <CardHeader>
+          <CardTitle>Doors</CardTitle>
+          {doors.data && (
+            <CardDescription>
+              {stats.doors} door{stats.doors === 1 ? '' : 's'} · {stats.readers} reader
+              {stats.readers === 1 ? '' : 's'}
+              {stats.invalid ? ` · ${stats.invalid} invalid` : ''}
+            </CardDescription>
           )}
         </CardHeader>
         <CardContent className="space-y-4">
@@ -516,7 +451,6 @@ export default function DoorsPage() {
                   <TableHead>Floor</TableHead>
                   <TableHead>Readers</TableHead>
                   <TableHead>Reads</TableHead>
-                  {canEdit && <TableHead />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -532,26 +466,6 @@ export default function DoorsPage() {
                       invalid={invalid}
                       canEdit={canEdit}
                       onToggle={() => toggle(door.id)}
-                      onDeleteDoor={() => {
-                        const extra =
-                          door.eventCount > 0
-                            ? ` ${door.eventCount} badge event(s) on this door will also be deleted.`
-                            : '';
-                        if (confirm(`Delete door “${door.name}”?${extra}`)) {
-                          removeDoor.mutate(door.id);
-                        }
-                      }}
-                      onDeleteReader={(reader) => {
-                        const extra =
-                          reader.eventCount > 0
-                            ? ` ${reader.eventCount} badge event(s) on this reader will also be deleted.`
-                            : '';
-                        if (confirm(`Delete reader “${reader.rawLocation}”?${extra}`)) {
-                          removeReader.mutate({ doorId: door.id, readerId: reader.id });
-                        }
-                      }}
-                      deletingDoor={removeDoor.isPending}
-                      deletingReader={removeReader.isPending}
                     />
                   );
                 })}
@@ -571,10 +485,6 @@ function DoorRows({
   invalid,
   canEdit,
   onToggle,
-  onDeleteDoor,
-  onDeleteReader,
-  deletingDoor,
-  deletingReader,
 }: {
   door: DoorView;
   offices: OfficeView[];
@@ -582,10 +492,6 @@ function DoorRows({
   invalid: boolean;
   canEdit: boolean;
   onToggle: () => void;
-  onDeleteDoor: () => void;
-  onDeleteReader: (reader: ReaderView) => void;
-  deletingDoor: boolean;
-  deletingReader: boolean;
 }) {
   return (
     <>
@@ -608,17 +514,10 @@ function DoorRows({
           <ReaderTags readers={door.readers} />
         </TableCell>
         <TableCell className="text-right tabular-nums">{door.eventCount}</TableCell>
-        {canEdit && (
-          <TableCell>
-            <Button variant="ghost" size="icon" disabled={deletingDoor} onClick={onDeleteDoor}>
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </TableCell>
-        )}
       </TableRow>
       {open && (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={canEdit ? 7 : 6} className="bg-muted/40 p-4">
+          <TableCell colSpan={6} className="bg-muted/40 p-4">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Readers
             </p>
@@ -634,7 +533,6 @@ function DoorRows({
                     <TableHead className="text-right">Events</TableHead>
                     <TableHead>Detection</TableHead>
                     <TableHead>Role</TableHead>
-                    {canEdit && <TableHead />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -659,18 +557,6 @@ function DoorRows({
                       <TableCell>
                         <ReaderRoleCell doorId={door.id} reader={reader} canEdit={canEdit} />
                       </TableCell>
-                      {canEdit && (
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            disabled={deletingReader}
-                            onClick={() => onDeleteReader(reader)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      )}
                     </TableRow>
                   ))}
                 </TableBody>

@@ -11,10 +11,14 @@ export function EmployeeSearchSelect({
   employees,
   selectedIds,
   onChange,
+  placeholder = 'Search to compare people…',
+  selectedBadge,
 }: {
   employees: EmployeeView[];
   selectedIds: number[];
   onChange: (ids: number[]) => void;
+  placeholder?: string;
+  selectedBadge?: (count: number) => string;
 }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -83,13 +87,16 @@ export function EmployeeSearchSelect({
   }
 
   const everyone = selectedIds.length === 0;
+  const badgeText = everyone
+    ? 'All employees'
+    : (selectedBadge ?? ((n) => `Comparing ${n}`))(selectedIds.length);
 
   return (
     <div ref={rootRef} className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={everyone ? 'default' : 'secondary'} className="gap-1">
           <Users className="h-3 w-3" />
-          {everyone ? 'All employees' : `Comparing ${selectedIds.length}`}
+          {badgeText}
         </Badge>
         {!everyone && (
           <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onChange([])}>
@@ -135,7 +142,7 @@ export function EmployeeSearchSelect({
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
-            placeholder={everyone ? 'Search to compare people…' : 'Add another…'}
+            placeholder={everyone ? placeholder : 'Add another…'}
             className="h-8 w-full bg-transparent pl-7 pr-2 text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
