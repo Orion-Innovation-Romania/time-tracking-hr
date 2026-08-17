@@ -239,6 +239,7 @@ function ThresholdsTab() {
   useEffect(() => {
     if (conditions.data) setRules(conditions.data);
   }, [conditions.data]);
+  const [selectedCondition, setSelectedCondition] = useState('');
 
   const save = useMutation({
     mutationFn: async () => {
@@ -328,9 +329,16 @@ function ThresholdsTab() {
             <CardTitle>Special conditions</CardTitle>
             <CardDescription>Optional rules applied after the core calculation.</CardDescription>
           </div>
-          <Select onValueChange={(v) => addRule(v as ConditionType)}>
+          <Select
+            value={selectedCondition}
+            onValueChange={(v) => {
+              addRule(v as ConditionType);
+            }}
+          >
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Add condition" />
+              <SelectValue placeholder="Add condition">
+                {selectedCondition ? CONDITION_LABELS[selectedCondition as ConditionType] : undefined}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {CONDITION_TYPES.filter((t) => !rules.some((r) => r.type === t)).map((t) => (
