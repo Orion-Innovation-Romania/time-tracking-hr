@@ -65,7 +65,7 @@ export default function PortalPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-accent/30">
+    <div className="min-h-screen bg-gradient-to-b from-background to-accent/30 flex flex-col">
       <header className="border-b bg-card/60 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
@@ -87,7 +87,7 @@ export default function PortalPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-16">
+      <main className="mx-auto max-w-5xl px-6 py-16 flex-1">
         <div className="animate-fade-in">
           <p className="text-sm font-semibold uppercase tracking-wide oi-gradient-text">
             {OI_TAGLINE}
