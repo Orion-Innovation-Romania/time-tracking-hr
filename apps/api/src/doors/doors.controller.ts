@@ -114,6 +114,20 @@ export class DoorsController {
     return door;
   }
 
+  @Delete(':id')
+  @Roles('admin')
+  async remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: SessionUser) {
+    const result = await this.doors.removeDoor(id);
+    await this.audit.log({
+      userId: user.id,
+      action: 'delete',
+      entity: 'Door',
+      entityId: id,
+      after: result,
+    });
+    return result;
+  }
+
   @Patch(':doorId/readers/:readerId')
   @Roles('admin')
   async updateReader(

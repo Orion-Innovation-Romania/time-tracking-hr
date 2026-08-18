@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, DoorOpen, Loader2, Plus } from 'lucide-react';
+import { ChevronRight, DoorOpen, Loader2, Plus, Trash2 } from 'lucide-react';
 import { DOOR_ROLES, type DoorRole, type DoorView, type OfficeView, type ReaderView } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { useSession } from '@/lib/session';
@@ -12,6 +12,15 @@ import { UserGuide } from '@/components/user-guide';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -268,12 +277,15 @@ function ReaderTags({ readers }: { readers: ReaderView[] }) {
 }
 
 export default function DoorsPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { data: session } = useSession();
   const canEdit = session?.role === 'admin';
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState('');
   const [officeFilter, setOfficeFilter] = useState<string>(NONE);
   const [floorFilter, setFloorFilter] = useState<string>(NONE);
+  const [confirmDoor, setConfirmDoor] = useState<DoorView | null>(null);
 
   const doors = useQuery({
     queryKey: ['doors'],
@@ -282,6 +294,17 @@ export default function DoorsPage() {
   const offices = useQuery({
     queryKey: ['offices'],
     queryFn: () => api<OfficeView[]>('/offices'),
+  });
+
+  const removeDoor = useMutation({
+    mutationFn: (id: number) => api(`/doors/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      toast({ title: 'Door deleted', variant: 'success' });
+      invalidateDoors(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['summaries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: () => toast({ title: 'Could not delete door', variant: 'error' }),
   });
 
   const floors = useMemo(() => {
@@ -455,6 +478,7 @@ export default function DoorsPage() {
                   <TableHead>Floor</TableHead>
                   <TableHead>Readers</TableHead>
                   <TableHead>Reads</TableHead>
+                  {canEdit && <TableHead />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -470,6 +494,8 @@ export default function DoorsPage() {
                       invalid={invalid}
                       canEdit={canEdit}
                       onToggle={() => toggle(door.id)}
+                      onDelete={() => setConfirmDoor(door)}
+                      deleting={removeDoor.isPending}
                     />
                   );
                 })}
@@ -478,6 +504,38 @@ export default function DoorsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(confirmDoor)} onOpenChange={(open) => !open && setConfirmDoor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete door</DialogTitle>
+            <DialogDescription>
+              Delete “{confirmDoor?.name}”? Readers on this door are removed too. A later import
+              with the same location will recreate the door.
+              {confirmDoor && confirmDoor.eventCount > 0
+                ? ` ${confirmDoor.eventCount} badge event${confirmDoor.eventCount === 1 ? '' : 's'} on this door will also be deleted.`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost" onClick={() => setConfirmDoor(null)}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              disabled={removeDoor.isPending}
+              onClick={() => {
+                if (confirmDoor) removeDoor.mutate(confirmDoor.id);
+                setConfirmDoor(null);
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -489,6 +547,8 @@ function DoorRows({
   invalid,
   canEdit,
   onToggle,
+  onDelete,
+  deleting,
 }: {
   door: DoorView;
   offices: OfficeView[];
@@ -496,6 +556,8 @@ function DoorRows({
   invalid: boolean;
   canEdit: boolean;
   onToggle: () => void;
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   return (
     <>
@@ -518,10 +580,17 @@ function DoorRows({
           <ReaderTags readers={door.readers} />
         </TableCell>
         <TableCell className="text-right tabular-nums">{door.eventCount}</TableCell>
+        {canEdit && (
+          <TableCell>
+            <Button variant="ghost" size="icon" disabled={deleting} onClick={onDelete}>
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </TableCell>
+        )}
       </TableRow>
       {open && (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={6} className="bg-muted/40 p-4">
+          <TableCell colSpan={canEdit ? 7 : 6} className="bg-muted/40 p-4">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Readers
             </p>

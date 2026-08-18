@@ -327,7 +327,7 @@ export function problemReportEmailHtml(input: {
     extraHtml,
     ctaLabel: ctaUrl ? 'Open this page' : undefined,
     ctaUrl: ctaUrl || undefined,
-    footnoteHtml: `<p style="margin:0;font-size:13px;line-height:1.5;color:#64748b;">The screenshot (if attached) shows what was on screen before they filled in this form. It may include employee data that was visible on the page.</p>`,
+    footnoteHtml: `<p style="margin:0;font-size:13px;line-height:1.5;color:#64748b;">The screenshot (if attached) shows only what was on their screen at that moment, not the whole page. It may include employee data that was visible.</p>`,
     includeBanner: input.includeBanner,
   });
 }

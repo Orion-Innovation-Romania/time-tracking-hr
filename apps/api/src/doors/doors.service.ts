@@ -110,6 +110,18 @@ export class DoorsService {
     });
   }
 
+  async removeDoor(id: number): Promise<{ ok: true; readersDeleted: number; eventsDeleted: number }> {
+    const door = await this.prisma.door.findUnique({
+      where: { id },
+      include: { readers: { include: { _count: { select: { events: true } } } } },
+    });
+    if (!door) throw new NotFoundException('Door not found');
+    const readersDeleted = door.readers.length;
+    const eventsDeleted = door.readers.reduce((n, r) => n + r._count.events, 0);
+    await this.prisma.door.delete({ where: { id } });
+    return { ok: true, readersDeleted, eventsDeleted };
+  }
+
   private async findOrCreateDoor(name: string, floor: string | null) {
     const groupingKey = doorGroupingKey(name, floor);
     const existing = await this.prisma.door.findUnique({ where: { groupingKey } });

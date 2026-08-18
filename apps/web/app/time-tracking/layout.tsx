@@ -66,7 +66,7 @@ export default function TimeTrackingLayout({ children }: { children: ReactNode }
   }
 
   return (
-    <div className="flex min-h-screen bg-accent/20">
+    <div className="flex min-h-screen bg-accent/20" data-ttah-shell>
       <aside className="sticky top-0 flex h-screen w-64 flex-col border-r bg-card">
         <div className="flex items-center gap-3 border-b px-5 py-4">
           <OrionMark variant="gradient" className="h-7 w-11" />
@@ -139,7 +139,7 @@ export default function TimeTrackingLayout({ children }: { children: ReactNode }
         </div>
       </aside>
 
-      <main className="flex-1 overflow-x-hidden">
+      <main className="min-w-0 flex-1">
         <div className="mx-auto max-w-7xl px-8 py-6">{children}</div>
       </main>
     </div>

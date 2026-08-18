@@ -3,10 +3,10 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Bug, Loader2 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MailProblemReportPolicy, ProblemReportResult } from '@ttah/shared';
 import { api, apiUpload, ApiRequestError } from '@/lib/api';
-import { capturePageJpeg, waitForPaint } from '@/lib/capture-page';
+import { capturePageJpeg } from '@/lib/capture-page';
 import { useSession } from '@/lib/session';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
@@ -40,14 +40,14 @@ export function ProblemReportHost() {
 function ProblemReportFab() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [hidingFab, setHidingFab] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [intendedAction, setIntendedAction] = useState('');
   const [whatHappened, setWhatHappened] = useState('');
   const [expected, setExpected] = useState('');
   const [pageUrl, setPageUrl] = useState('');
   const [viewport, setViewport] = useState('');
-  const [screenshot, setScreenshot] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const screenshotRef = useRef<Blob | null>(null);
 
   const policy = useQuery({
     queryKey: ['mail', 'problem-report-policy'],
@@ -69,25 +69,30 @@ function ProblemReportFab() {
   }, [intendedAction, whatHappened, expected]);
 
   const resetForm = () => {
+    screenshotRef.current = null;
     setIntendedAction('');
     setWhatHappened('');
     setExpected('');
     setPageUrl('');
     setViewport('');
-    setScreenshot(null);
     setPreviewUrl(null);
   };
 
   const openDialog = async () => {
-    setHidingFab(true);
-    await waitForPaint();
-    const blob = await capturePageJpeg();
+    if (picking) return;
+    setPicking(true);
     setPageUrl(window.location.href);
     setViewport(`${window.innerWidth}x${window.innerHeight}`);
-    setScreenshot(blob);
-    setPreviewUrl(blob ? URL.createObjectURL(blob) : null);
-    setOpen(true);
-    setHidingFab(false);
+    screenshotRef.current = null;
+    setPreviewUrl(null);
+    try {
+      const blob = await capturePageJpeg();
+      screenshotRef.current = blob;
+      setPreviewUrl(blob ? URL.createObjectURL(blob) : null);
+    } finally {
+      setPicking(false);
+      setOpen(true);
+    }
   };
 
   const send = useMutation({
@@ -98,15 +103,15 @@ function ProblemReportFab() {
       form.append('expected', expected.trim());
       form.append('pageUrl', pageUrl);
       form.append('viewport', viewport);
-      if (screenshot) {
-        form.append('screenshot', screenshot, 'screenshot.jpg');
+      if (screenshotRef.current) {
+        form.append('screenshot', screenshotRef.current, 'screenshot.jpg');
       }
       return apiUpload<ProblemReportResult>('/mail/problem-report', form);
     },
     onSuccess: (data) => {
       toast({
         title: `Report sent · ${data.id}`,
-        description: 'The development team received your note and a screenshot of this page.',
+        description: 'The development team received your note and a screenshot of what you were looking at.',
         variant: 'success',
       });
       setOpen(false);
@@ -126,21 +131,25 @@ function ProblemReportFab() {
 
   return (
     <>
-      {!open && !hidingFab && (
+      {!open && (
         <button
           type="button"
           data-ttah-problem-report="fab"
           onClick={() => void openDialog()}
+          disabled={picking}
           className={cn(
             'fixed bottom-4 right-4 z-40 flex h-12 items-center gap-2 rounded-full bg-primary px-3.5',
             'text-primary-foreground shadow-lg transition-colors hover:bg-primary/90',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            picking && 'opacity-80',
           )}
           aria-label="Report a problem"
           title="Report a problem"
         >
-          <Bug className="h-5 w-5" />
-          <span className="hidden pr-1 text-sm font-medium sm:inline">Report a problem</span>
+          {picking ? <Loader2 className="h-5 w-5 animate-spin" /> : <Bug className="h-5 w-5" />}
+          <span className="hidden pr-1 text-sm font-medium sm:inline">
+            {picking ? 'Capturing…' : 'Report a problem'}
+          </span>
         </button>
       )}
 
@@ -156,7 +165,7 @@ function ProblemReportFab() {
           <DialogHeader>
             <DialogTitle>Report a problem</DialogTitle>
             <DialogDescription>
-              Tell us what you were doing. We include a screenshot of this page and your account so
+              Tell us what you were doing. We include a screenshot of this tab and your account so
               we can find the screen.
             </DialogDescription>
           </DialogHeader>
@@ -194,17 +203,16 @@ function ProblemReportFab() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewUrl}
-                  alt="Screenshot of this page"
-                  className="max-h-40 w-full rounded-md border object-cover object-top"
+                  alt="Screenshot of this tab"
+                  className="max-h-48 w-full rounded-md border bg-muted object-contain object-top"
                 />
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Could not capture the screen. The report will still be sent with the details
-                  above.
+                  No screenshot attached. The report will still be sent with the details above.
                 </p>
               )}
               <p className="text-xs text-muted-foreground">
-                The image includes whatever is visible on this page, which may be employee data.
+                The image is this browser tab as you shared it, which may include employee data.
               </p>
             </div>
           </div>

@@ -328,8 +328,8 @@ export default function MailAdminPage() {
                 autoComplete="off"
               />
               <p className="text-xs text-muted-foreground">
-                One address, or several separated by commas. Users send a screenshot of the page
-                plus what they wanted, what happened, and what should have happened.
+                One address, or several separated by commas. Users send a screenshot of what they
+                currently see, plus what they wanted, what happened, and what should have happened.
               </p>
             </div>
             <div>

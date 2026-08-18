@@ -1,41 +1,52 @@
-const MAX_BYTES = 1_800_000;
-
-function dataUrlToBlob(dataUrl: string): Promise<Blob> {
-  return fetch(dataUrl).then((res) => res.blob());
-}
-
 /**
- * JPEG of the current page, taken before the problem-report dialog opens.
- * Returns null if the library cannot render (modern CSS, CORS images, etc.).
+ * JPEG of the visible tab, using the browser's own screen capture.
+ * html-to-image rebuilds the DOM and was producing a blank / wrong picture.
  */
 export async function capturePageJpeg(): Promise<Blob | null> {
+  const media = navigator.mediaDevices;
+  if (!media?.getDisplayMedia) return null;
+
+  let stream: MediaStream | undefined;
   try {
-    const { toJpeg } = await import('html-to-image');
-    const options = {
-      quality: 0.72,
-      pixelRatio: 1,
-      backgroundColor: '#ffffff',
-      cacheBust: true,
-      filter: (node: Node) => {
-        if (!(node instanceof HTMLElement)) return true;
-        return node.dataset.ttahProblemReport !== 'fab';
-      },
-    };
-    let dataUrl = await toJpeg(document.body, options);
-    let blob = await dataUrlToBlob(dataUrl);
-    if (blob.size > MAX_BYTES) {
-      dataUrl = await toJpeg(document.body, { ...options, quality: 0.5 });
-      blob = await dataUrlToBlob(dataUrl);
+    stream = await media.getDisplayMedia({
+      audio: false,
+      video: { frameRate: 1 },
+      preferCurrentTab: true,
+      selfBrowserSurface: 'include',
+      surfaceSwitching: 'exclude',
+      systemAudio: 'exclude',
+    } as DisplayMediaStreamOptions);
+
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    await video.play();
+    if (!video.videoWidth || !video.videoHeight) {
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => resolve();
+      });
     }
-    if (blob.size > 2 * 1024 * 1024) return null;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((next) => resolve(next), 'image/jpeg', 0.72);
+    });
     return blob;
   } catch {
     return null;
+  } finally {
+    stream?.getTracks().forEach((track) => track.stop());
   }
-}
-
-export function waitForPaint(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
 }
