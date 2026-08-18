@@ -22,6 +22,10 @@ export default function ChangePasswordPage() {
   const [confirm, setConfirm] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
 
+  function isValidPassword(p: string) {
+    return p.length >= 10 && /[A-Za-z]/.test(p) && /\d/.test(p) && !/\s/.test(p);
+  }
+
   const mutation = useMutation({
     mutationFn: () =>
       api<SessionUser>('/auth/change-password', {
@@ -53,7 +57,7 @@ export default function ChangePasswordPage() {
             <OrionMark variant="gradient" className="mb-3 w-16" />
             <CardTitle className="text-2xl">Set a new password</CardTitle>
             <CardDescription>
-              Minimum 10 characters, with at least one letter and one digit.
+              Minimum 10 characters, with at least one letter and one digit; spaces are not allowed.
             </CardDescription>
           </CardHeader>
         <CardContent>
@@ -90,6 +94,9 @@ export default function ChangePasswordPage() {
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
               />
+              <p className={newPassword.includes(' ') ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+                Minimum 10 characters, include a letter and a digit; spaces are not allowed.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="confirm">Confirm new password</Label>
@@ -101,11 +108,20 @@ export default function ChangePasswordPage() {
                 onChange={(e) => setConfirm(e.target.value)}
                 required
               />
+              <p className={confirm && confirm !== newPassword ? 'text-xs text-destructive' : 'hidden'}>
+                Passwords do not match.
+              </p>
             </div>
             {errorMessage && (
               <p className="text-sm font-medium text-destructive">{errorMessage}</p>
             )}
-            <Button type="submit" className="w-full" disabled={mutation.isPending}>
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={
+                mutation.isPending || !isValidPassword(newPassword) || newPassword !== confirm
+              }
+            >
               {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Update password
             </Button>

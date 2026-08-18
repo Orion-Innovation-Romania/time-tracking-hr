@@ -69,6 +69,10 @@ export default function UsersAdminPage() {
   const [setInitialUser, setSetInitialUser] = useState<UserAccountView | null>(null);
   const [setInitialOpen, setSetInitialOpen] = useState(false);
   const [setInitialPwd, setSetInitialPwd] = useState('');
+  
+  function isValidPassword(p: string) {
+    return p.length >= 10 && /[A-Za-z]/.test(p) && /\d/.test(p) && !/\s/.test(p);
+  }
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -345,9 +349,12 @@ export default function UsersAdminPage() {
                 required
                 autoComplete="new-password"
               />
+              <p className={initialPassword.includes(' ') ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+                Minimum 10 chars, include a letter and a digit; spaces are not allowed.
+              </p>
             </div>
             <div className="flex items-end sm:col-span-2 lg:col-span-3">
-              <Button type="submit" disabled={create.isPending}>
+              <Button type="submit" disabled={create.isPending || !isValidPassword(initialPassword)}>
                 {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Create
               </Button>
@@ -485,7 +492,9 @@ export default function UsersAdminPage() {
                 onChange={(e) => setSetInitialPwd(e.target.value)}
                 autoComplete="new-password"
               />
-              <p className="text-xs text-muted-foreground">Minimum 10 characters, include a letter and a digit.</p>
+              <p className={setInitialPwd.includes(' ') ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+                Minimum 10 chars, include a letter and a digit; spaces are not allowed.
+              </p>
             </div>
           </div>
 
@@ -501,7 +510,7 @@ export default function UsersAdminPage() {
                 setInitial.mutate({ id: setInitialUser.id, initialPassword: setInitialPwd });
                 setSetInitialOpen(false);
               }}
-              disabled={setInitial.isPending || !(setInitialPwd.length >= 10 && /[A-Za-z]/.test(setInitialPwd) && /\d/.test(setInitialPwd))}
+              disabled={setInitial.isPending || !isValidPassword(setInitialPwd)}
             >
               Set
             </Button>
