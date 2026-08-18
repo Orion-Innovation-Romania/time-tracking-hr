@@ -22,6 +22,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogClose,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -177,6 +178,8 @@ export default function AnomaliesPage() {
   const [employeeIds, setEmployeeIds] = useState<number[]>([]);
   const [editing, setEditing] = useState<DailySummaryView | null>(null);
   const [insight, setInsight] = useState<{ row: DailySummaryView; flag: AnomalyFlag } | null>(null);
+  const [confirmRow, setConfirmRow] = useState<DailySummaryView | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const employees = useEmployees(true);
   const scopedKey = useMemo(
@@ -331,13 +334,8 @@ export default function AnomaliesPage() {
                           size="icon"
                           disabled={deleteDay.isPending}
                           onClick={() => {
-                            if (
-                              confirm(
-                                `Delete hours for ${row.employeeName ?? `#${row.employeeId}`} on ${formatDate(row.date)}? Badge events for that day are removed too.`,
-                              )
-                            ) {
-                              deleteDay.mutate(row);
-                            }
+                            setConfirmRow(row);
+                            setConfirmOpen(true);
                           }}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -360,6 +358,32 @@ export default function AnomaliesPage() {
           onClose={() => setInsight(null)}
         />
       )}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete hours</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete hours for {confirmRow?.employeeName ?? `#${confirmRow?.employeeId}`} on {confirmRow ? formatDate(confirmRow.date) : ''}? This will remove badge events for that day.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmRow) deleteDay.mutate(confirmRow);
+                setConfirmOpen(false);
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

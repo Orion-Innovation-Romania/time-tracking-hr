@@ -15,6 +15,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -53,6 +62,13 @@ export default function UsersAdminPage() {
   const [role, setRole] = useState<Role>('user');
   const [initialPassword, setInitialPassword] = useState('');
   const [editing, setEditing] = useState<UserAccountView | null>(null);
+  const [confirmResetUser, setConfirmResetUser] = useState<UserAccountView | null>(null);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserAccountView | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [setInitialUser, setSetInitialUser] = useState<UserAccountView | null>(null);
+  const [setInitialOpen, setSetInitialOpen] = useState(false);
+  const [setInitialPwd, setSetInitialPwd] = useState('');
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -236,9 +252,8 @@ export default function UsersAdminPage() {
                   variant="secondary"
                   disabled={resetPassword.isPending}
                   onClick={() => {
-                    if (confirm(`Reset password for ${u.username} to the initial password?`)) {
-                      resetPassword.mutate(u.id);
-                    }
+                    setConfirmResetUser(u);
+                    setConfirmResetOpen(true);
                   }}
                 >
                   <KeyRound className="h-3.5 w-3.5" /> Reset
@@ -398,6 +413,101 @@ export default function UsersAdminPage() {
           </CardContent>
         </Card>
       )}
+      <Dialog open={confirmResetOpen} onOpenChange={setConfirmResetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset password</DialogTitle>
+            <DialogDescription>
+              Reset password for {confirmResetUser?.username}? They will be set to the initial password and must change it on next login.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" onClick={() => setConfirmResetOpen(false)}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              onClick={() => {
+                if (confirmResetUser) resetPassword.mutate(confirmResetUser.id);
+                setConfirmResetOpen(false);
+              }}
+            >
+              Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete user</DialogTitle>
+            <DialogDescription>
+              Delete {confirmDeleteUser?.username}? They will be removed from users.yml and will no longer be able to log in.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" onClick={() => setConfirmDeleteOpen(false)}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmDeleteUser) removeUser.mutate(confirmDeleteUser.id);
+                setConfirmDeleteOpen(false);
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={setInitialOpen} onOpenChange={setSetInitialOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set initial password</DialogTitle>
+            <DialogDescription>
+              Set a new initial password for {setInitialUser?.username}. The user must change it at next login.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="initial-pwd">Initial password</Label>
+              <Input
+                id="initial-pwd"
+                type="password"
+                value={setInitialPwd}
+                onChange={(e) => setSetInitialPwd(e.target.value)}
+                autoComplete="new-password"
+              />
+              <p className="text-xs text-muted-foreground">Minimum 10 characters, include a letter and a digit.</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" onClick={() => setSetInitialOpen(false)}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              onClick={() => {
+                if (!setInitialUser) return;
+                setInitial.mutate({ id: setInitialUser.id, initialPassword: setInitialPwd });
+                setSetInitialOpen(false);
+              }}
+              disabled={setInitial.isPending || !(setInitialPwd.length >= 10 && /[A-Za-z]/.test(setInitialPwd) && /\d/.test(setInitialPwd))}
+            >
+              Set
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>
@@ -473,11 +583,9 @@ export default function UsersAdminPage() {
                           variant="outline"
                           disabled={setInitial.isPending}
                           onClick={() => {
-                            const pwd = window.prompt(
-                              `New initial password for ${u.username} (≥10 chars, letter + digit). User must change it at next login.`,
-                            );
-                            if (!pwd) return;
-                            setInitial.mutate({ id: u.id, initialPassword: pwd });
+                            setSetInitialUser(u);
+                            setSetInitialPwd('');
+                            setSetInitialOpen(true);
                           }}
                         >
                           Set initial
@@ -495,13 +603,8 @@ export default function UsersAdminPage() {
                           variant="secondary"
                           disabled={resetPassword.isPending}
                           onClick={() => {
-                            if (
-                              confirm(
-                                `Reset ${u.username} to the initial password? They must set a new password at next login.`,
-                              )
-                            ) {
-                              resetPassword.mutate(u.id);
-                            }
+                            setConfirmResetUser(u);
+                            setConfirmResetOpen(true);
                           }}
                         >
                           <KeyRound className="h-3.5 w-3.5" /> Reset password
@@ -511,13 +614,8 @@ export default function UsersAdminPage() {
                           variant="outline"
                           disabled={removeUser.isPending || u.id === session.id}
                           onClick={() => {
-                            if (
-                              confirm(
-                                `Delete ${u.username}? They will be removed from users.yml and will no longer be able to log in.`,
-                              )
-                            ) {
-                              removeUser.mutate(u.id);
-                            }
+                            setConfirmDeleteUser(u);
+                            setConfirmDeleteOpen(true);
                           }}
                         >
                           <Trash2 className="h-3.5 w-3.5" /> Delete
