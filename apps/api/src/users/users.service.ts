@@ -20,8 +20,16 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { username } });
   }
 
+  findByEmail(email: string) {
+    return this.prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+  }
+
   findById(id: number) {
     return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  findByPasswordResetTokenHash(hash: string) {
+    return this.prisma.user.findUnique({ where: { passwordResetTokenHash: hash } });
   }
 
   hash(password: string): Promise<string> {
@@ -39,7 +47,7 @@ export class UsersService {
   list(): Promise<UserAccountView[]> {
     return this.prisma.user
       .findMany({
-        orderBy: [{ passwordResetRequestedAt: 'desc' }, { username: 'asc' }],
+        orderBy: { username: 'asc' },
       })
       .then((rows) => rows.map((r) => this.toView(r)));
   }
@@ -92,6 +100,9 @@ export class UsersService {
       mustChangePassword?: boolean;
       failedAttempts?: number;
       lockedUntil?: null;
+      passwordResetTokenHash?: null;
+      passwordResetExpiresAt?: null;
+      passwordResetRequestedAt?: null;
     } = {};
 
     if (input.firstName !== undefined) data.firstName = input.firstName.trim();
@@ -100,9 +111,16 @@ export class UsersService {
       const email = input.email.trim().toLowerCase();
       await this.assertEmailFree(email, userId);
       data.email = email;
+      data.passwordResetTokenHash = null;
+      data.passwordResetExpiresAt = null;
     }
     if (input.role !== undefined) data.role = input.role;
     if (input.isActive !== undefined) data.isActive = input.isActive;
+    if (input.isActive === false) {
+      data.passwordResetTokenHash = null;
+      data.passwordResetExpiresAt = null;
+      data.passwordResetRequestedAt = null;
+    }
     if (input.initialPassword) {
       const hash = await this.hash(input.initialPassword);
       data.initialPasswordHash = hash;
@@ -110,6 +128,9 @@ export class UsersService {
       data.mustChangePassword = true;
       data.failedAttempts = 0;
       data.lockedUntil = null;
+      data.passwordResetTokenHash = null;
+      data.passwordResetExpiresAt = null;
+      data.passwordResetRequestedAt = null;
     }
 
     if (input.role === 'user' && user.role === 'admin') {
@@ -140,34 +161,31 @@ export class UsersService {
     const passwordHash = await this.hash(newPassword);
     return this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash, mustChangePassword: mustChange, failedAttempts: 0, lockedUntil: null },
-    });
-  }
-
-  async resetToInitial(userId: number) {
-    const user = await this.findById(userId);
-    if (!user) throw new NotFoundException('User not found');
-    return this.prisma.user.update({
-      where: { id: userId },
       data: {
-        passwordHash: user.initialPasswordHash,
-        mustChangePassword: true,
+        passwordHash,
+        mustChangePassword: mustChange,
         failedAttempts: 0,
         lockedUntil: null,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
         passwordResetRequestedAt: null,
       },
     });
   }
 
-  async requestPasswordReset(username: string): Promise<{ ok: true }> {
-    const user = await this.findByUsername(username.trim());
-    if (user?.isActive) {
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { passwordResetRequestedAt: new Date() },
-      });
-    }
-    return { ok: true };
+  async storePasswordResetToken(
+    userId: number,
+    tokenHash: string,
+    expiresAt: Date,
+  ) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: expiresAt,
+        passwordResetRequestedAt: new Date(),
+      },
+    });
   }
 
   async remove(userId: number, actorId: number): Promise<UserAccountView> {
@@ -180,7 +198,12 @@ export class UsersService {
     this.file.remove(user.username);
     const row = await this.prisma.user.update({
       where: { id: userId },
-      data: { isActive: false },
+      data: {
+        isActive: false,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        passwordResetRequestedAt: null,
+      },
     });
     return this.toView(row);
   }

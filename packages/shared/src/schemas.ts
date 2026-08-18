@@ -44,15 +44,19 @@ export const changePasswordSchema = z
   });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 
-export const adminResetPasswordSchema = z.object({
-  userId: z.number().int().positive(),
-});
-export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordSchema>;
-
 export const forgotPasswordSchema = z.object({
-  username: z.string().min(1).max(64),
+  email: z.string().trim().email().max(254),
 });
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z
+    .string()
+    .trim()
+    .regex(/^[a-f0-9]{64}$/i, 'Invalid reset token'),
+  newPassword: passwordSchema,
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
 const usernameSchema = z
   .string()
@@ -62,11 +66,21 @@ const usernameSchema = z
 
 const nameSchema = z.string().trim().min(1).max(80);
 
+/** Portal user mailbox — company addresses only. */
+export const userEmailSchema = z
+  .string()
+  .trim()
+  .email()
+  .max(254)
+  .refine((value) => value.toLowerCase().endsWith('@orioninc.com'), {
+    message: 'Use an @orioninc.com email',
+  });
+
 export const createUserSchema = z.object({
   username: usernameSchema,
   firstName: nameSchema,
   lastName: nameSchema,
-  email: z.string().trim().email().max(254),
+  email: userEmailSchema,
   role: z.enum(ROLES).default('user'),
   initialPassword: passwordSchema,
 });
@@ -75,7 +89,7 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export const updateUserSchema = z.object({
   firstName: nameSchema.optional(),
   lastName: nameSchema.optional(),
-  email: z.string().trim().email().max(254).optional(),
+  email: userEmailSchema.optional(),
   role: z.enum(ROLES).optional(),
   isActive: z.boolean().optional(),
   initialPassword: passwordSchema.optional(),
@@ -239,6 +253,17 @@ export function parseMailRecipients(raw: string): string[] {
   return [...new Set(raw.split(/[,;]+/).map((s) => s.trim()).filter(Boolean))];
 }
 
+const mailRecipientList = z
+  .string()
+  .trim()
+  .max(500)
+  .default('')
+  .refine(
+    (value) =>
+      value === '' || parseMailRecipients(value).every((addr) => mailEmail.safeParse(addr).success),
+    { message: 'Use valid email addresses, separated by commas' },
+  );
+
 export const mailConfigSchema = z.object({
   authority: z.string().trim().url().max(500),
   clientId: z.string().trim().min(1).max(80),
@@ -247,19 +272,20 @@ export const mailConfigSchema = z.object({
   senderMailbox: mailEmail,
   fromAddress: mailEmail,
   fromName: z.string().trim().max(120).default(''),
-  reportRecipient: z
-    .string()
-    .trim()
-    .max(500)
-    .default('')
-    .refine(
-      (value) =>
-        value === '' || parseMailRecipients(value).every((addr) => mailEmail.safeParse(addr).success),
-      { message: 'Use valid email addresses, separated by commas' },
-    ),
+  reportRecipient: mailRecipientList,
   sendReportByDefault: z.boolean().default(false),
+  problemReportRecipient: mailRecipientList,
 });
 export type MailConfigInput = z.infer<typeof mailConfigSchema>;
+
+export const problemReportFieldsSchema = z.object({
+  intendedAction: z.string().trim().min(10).max(2000),
+  whatHappened: z.string().trim().min(10).max(2000),
+  expected: z.string().trim().min(10).max(2000),
+  pageUrl: z.string().trim().max(2000).optional().default(''),
+  viewport: z.string().trim().max(80).optional().default(''),
+});
+export type ProblemReportFields = z.infer<typeof problemReportFieldsSchema>;
 
 export const sendTestMailSchema = z.object({
   to: mailEmail,

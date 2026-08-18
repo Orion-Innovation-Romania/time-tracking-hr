@@ -37,6 +37,7 @@ import { DateRangePicker, isIsoDate, type DateRange } from '@/components/date-ra
 import { DayInsightDialog, FlagBadgeButton } from '@/components/day-insight-dialog';
 import { EmployeeSearchSelect } from '@/components/employee-search-select';
 import { useEmployees } from '@/lib/hooks';
+import { UserGuide } from '@/components/user-guide';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -385,7 +386,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
@@ -394,7 +395,10 @@ export default function DashboardPage() {
               : 'Overview · all employees'}
           </p>
         </div>
-        <DateRangePicker value={range} onChange={setRange} />
+        <div className="flex flex-wrap items-start gap-3">
+          <UserGuide variant="header" />
+          <DateRangePicker value={range} onChange={setRange} />
+        </div>
       </div>
 
       <EmployeeSearchSelect

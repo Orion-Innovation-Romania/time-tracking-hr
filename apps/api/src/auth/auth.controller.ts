@@ -5,8 +5,10 @@ import {
   HttpException,
   HttpStatus,
   Post,
+  Query,
   Req,
   Res,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,9 +17,11 @@ import {
   changePasswordSchema,
   forgotPasswordSchema,
   loginSchema,
+  resetPasswordSchema,
   type ChangePasswordInput,
   type ForgotPasswordInput,
   type LoginInput,
+  type ResetPasswordInput,
   type SessionUser,
 } from '@ttah/shared';
 import { Public } from '../common/decorators/public.decorator';
@@ -25,7 +29,7 @@ import { AllowWhenMustChange } from '../common/decorators/allow-password-change.
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import type { JwtConfig } from '../config/configuration';
-import { UsersService } from '../users/users.service';
+import { MailService } from '../mail/mail.service';
 import { MemoryRateLimit } from '../common/memory-rate-limit';
 import { AuthService } from './auth.service';
 import {
@@ -36,13 +40,14 @@ import {
 
 @Controller('auth')
 export class AuthController {
-  /** 5 attempts / 15 min per IP, 3 / 15 min per username. */
+  /** 5 attempts / 15 min per IP, 3 / 15 min per email. */
   private readonly forgotByIp = new MemoryRateLimit(5, 15 * 60 * 1000);
-  private readonly forgotByUser = new MemoryRateLimit(3, 15 * 60 * 1000);
+  private readonly forgotByEmail = new MemoryRateLimit(3, 15 * 60 * 1000);
+  private readonly resetByIp = new MemoryRateLimit(10, 15 * 60 * 1000);
 
   constructor(
     private readonly auth: AuthService,
-    private readonly users: UsersService,
+    private readonly mail: MailService,
     private readonly config: ConfigService,
   ) {}
 
@@ -77,15 +82,46 @@ export class AuthController {
     @Body(new ZodValidationPipe(forgotPasswordSchema)) body: ForgotPasswordInput,
     @Req() req: Request,
   ): Promise<{ ok: true }> {
+    if (!(await this.mail.isReady())) {
+      throw new ServiceUnavailableException(
+        'Password reset is unavailable because mail is not configured. Ask an administrator.',
+      );
+    }
+    const appUrl = this.auth.resolveAppUrl(req);
+    if (!appUrl) {
+      throw new ServiceUnavailableException(
+        'Password reset is unavailable. Ask an administrator.',
+      );
+    }
     const ip = req.ip ?? 'unknown';
-    const userKey = body.username.trim().toLowerCase();
-    if (!this.forgotByIp.try(`ip:${ip}`) || !this.forgotByUser.try(`user:${userKey}`)) {
+    const emailKey = body.email.trim().toLowerCase();
+    if (!this.forgotByIp.try(`ip:${ip}`) || !this.forgotByEmail.try(`email:${emailKey}`)) {
       throw new HttpException(
         'Too many reset requests. Try again later.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-    return this.users.requestPasswordReset(body.username);
+    return this.auth.requestPasswordReset(body.email, appUrl);
+  }
+
+  @Public()
+  @Get('reset-password')
+  peekResetPassword(@Query('token') token: string): Promise<{ ok: true }> {
+    const parsed = resetPasswordSchema.pick({ token: true }).safeParse({ token });
+    if (!parsed.success) {
+      throw new HttpException('This reset link is invalid or has expired.', HttpStatus.BAD_REQUEST);
+    }
+    return this.auth.peekPasswordResetToken(parsed.data.token);
+  }
+
+  @Public()
+  @Post('reset-password')
+  completeResetPassword(
+    @Body(new ZodValidationPipe(resetPasswordSchema)) body: ResetPasswordInput,
+    @Req() req: Request,
+  ): Promise<{ ok: true }> {
+    this.assertResetNotLimited(req);
+    return this.auth.completePasswordReset(body.token, body.newPassword);
   }
 
   @Public()
@@ -126,5 +162,15 @@ export class AuthController {
     const tokens = await this.auth.issueTokens(updated);
     setAuthCookies(res, tokens, this.cookieOpts());
     return updated;
+  }
+
+  private assertResetNotLimited(req: Request) {
+    const ip = req.ip ?? 'unknown';
+    if (!this.resetByIp.try(`reset:${ip}`)) {
+      throw new HttpException(
+        'Too many reset attempts. Try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
   }
 }

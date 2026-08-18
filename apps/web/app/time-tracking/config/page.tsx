@@ -18,7 +18,7 @@ import {
 } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { currentMonthRange, formatDate } from '@/lib/utils';
-import { CONDITION_LABELS, LEAVE_LABELS } from '@/lib/labels';
+import { CONDITION_LABELS, CONDITION_HINTS, CONDITION_DESCRIPTIONS, LEAVE_LABELS } from '@/lib/labels';
 import { DateRangePicker, type DateRange } from '@/components/date-range-picker';
 import DateField from '@/components/date-field';
 import {
@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { UserGuide } from '@/components/user-guide';
 import {
   Table,
   TableBody,
@@ -277,38 +278,63 @@ function ThresholdsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Thresholds &amp; rounding</CardTitle>
+          <CardDescription>
+            These numbers change how a day is computed. They do not rewrite history until you
+            save and run Recompute on the months you care about.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 sm:max-w-lg">
+        <CardContent className="max-w-2xl space-y-6">
           <div className="space-y-1.5">
             <Label className="text-xs">Short-exit merge (minutes)</Label>
             <Input
               type="number"
               min={0}
+              className="max-w-xs"
               value={thr.shortExitMinutes}
               onChange={(e) => setThr({ ...thr, shortExitMinutes: Number(e.target.value) })}
             />
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              If someone badges out and back in in under this many minutes, that gap is treated as
+              still inside — they keep earning worked time. Typical use: a short smoke break or a
+              door that double-reads. Gaps that overlap the lunch window are never merged (those
+              stay lunch). 0 = never merge. Default 10: a 6-minute step-out is still work; 11
+              minutes is a real break.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Round daily total (minutes)</Label>
             <Input
               type="number"
               min={0}
+              max={60}
+              className="max-w-xs"
               value={thr.roundingMinutes}
               onChange={(e) => setThr({ ...thr, roundingMinutes: Number(e.target.value) })}
             />
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              After presence and lunch, round worked minutes for that day to the nearest multiple
+              of N. First in, last out and lunch stay as measured. 0 = exact minutes (no
+              rounding). Example with 15: 7h 07m becomes 7h 00m; 7h 08m becomes 7h 15m. If the
+              special condition “Round daily total” is also enabled, that condition wins.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Early / overtime threshold (minutes)</Label>
             <Input
               type="number"
               min={0}
+              className="max-w-xs"
               value={thr.overtimeThresholdMinutes}
               onChange={(e) =>
                 setThr({ ...thr, overtimeThresholdMinutes: Number(e.target.value) })
               }
             />
-            <p className="text-[11px] text-muted-foreground">
-              Flag &amp; count time before start / after end once it reaches this many minutes.
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Worked hours stay inside the scheduled start–end. Minutes before start are stored as
+              early time; minutes after end as overtime. This threshold only decides when those
+              days get an Early start / Overtime flag on Anomalies, so 1–2 minute noise does not
+              clutter the list. Default 15: 8 minutes early is recorded but not flagged; 15+
+              minutes is flagged.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -316,9 +342,16 @@ function ThresholdsTab() {
             <Input
               type="number"
               min={1}
+              max={120}
+              className="max-w-xs"
               value={months}
               onChange={(e) => setMonths(Number(e.target.value))}
             />
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              How long badge history is meant to be kept (1–120 months). This is the stored
+              policy; there is no automatic nightly delete yet. Changing it does not erase data
+              by itself.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -327,7 +360,10 @@ function ThresholdsTab() {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle>Special conditions</CardTitle>
-            <CardDescription>Optional rules applied after the core calculation.</CardDescription>
+            <CardDescription>
+              Optional extra rules, applied after the core calculation. Uncheck to disable without
+              deleting. Each type can be added only once — open the menu to see what each one does.
+            </CardDescription>
           </div>
           <Select
             value={selectedCondition}
@@ -335,14 +371,14 @@ function ThresholdsTab() {
               addRule(v as ConditionType);
             }}
           >
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-52">
               <SelectValue placeholder="Add condition">
                 {selectedCondition ? CONDITION_LABELS[selectedCondition as ConditionType] : undefined}
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent align="end" className="w-[min(22rem,calc(100vw-2rem))]">
               {CONDITION_TYPES.filter((t) => !rules.some((r) => r.type === t)).map((t) => (
-                <SelectItem key={t} value={t}>
+                <SelectItem key={t} value={t} textValue={CONDITION_LABELS[t]} description={CONDITION_HINTS[t]}>
                   {CONDITION_LABELS[t]}
                 </SelectItem>
               ))}
@@ -351,54 +387,61 @@ function ThresholdsTab() {
         </CardHeader>
         <CardContent className="space-y-3">
           {rules.length === 0 && (
-            <p className="text-sm text-muted-foreground">No special conditions configured.</p>
+            <p className="text-sm text-muted-foreground">
+              No special conditions yet. Use Add condition — each option includes a short explanation.
+            </p>
           )}
           {rules.map((rule) => (
-            <div key={rule.type} className="flex items-center gap-3 rounded-lg border p-3">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4"
-                  checked={rule.enabled}
-                  onChange={(e) =>
-                    setRules(
-                      rules.map((r) =>
-                        r.type === rule.type ? { ...r, enabled: e.target.checked } : r,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <span className="flex-1 text-sm font-medium">{CONDITION_LABELS[rule.type]}</span>
-              {rule.type === 'IGNORE_ZONE' ? (
-                <Input
-                  className="w-56"
-                  placeholder="zone1, zone2"
-                  value={((rule.params.zones as string[]) ?? []).join(', ')}
-                  onChange={(e) =>
-                    updateRule(rule.type, {
-                      zones: e.target.value
-                        .split(',')
-                        .map((z) => z.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                />
-              ) : (
-                <Input
-                  type="number"
-                  className="w-28"
-                  value={Number(rule.params.minutes ?? 0)}
-                  onChange={(e) => updateRule(rule.type, { minutes: Number(e.target.value) })}
-                />
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setRules(rules.filter((r) => r.type !== rule.type))}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
+            <div key={rule.type} className="space-y-2 rounded-lg border p-3">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={rule.enabled}
+                    onChange={(e) =>
+                      setRules(
+                        rules.map((r) =>
+                          r.type === rule.type ? { ...r, enabled: e.target.checked } : r,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <span className="flex-1 text-sm font-medium">{CONDITION_LABELS[rule.type]}</span>
+                {rule.type === 'IGNORE_ZONE' ? (
+                  <Input
+                    className="w-56"
+                    placeholder="zone1, zone2"
+                    value={((rule.params.zones as string[]) ?? []).join(', ')}
+                    onChange={(e) =>
+                      updateRule(rule.type, {
+                        zones: e.target.value
+                          .split(',')
+                          .map((z) => z.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                ) : (
+                  <Input
+                    type="number"
+                    className="w-28"
+                    value={Number(rule.params.minutes ?? 0)}
+                    onChange={(e) => updateRule(rule.type, { minutes: Number(e.target.value) })}
+                  />
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setRules(rules.filter((r) => r.type !== rule.type))}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+              <p className="pl-7 text-xs leading-relaxed text-muted-foreground">
+                {CONDITION_DESCRIPTIONS[rule.type]}
+              </p>
             </div>
           ))}
         </CardContent>
@@ -408,6 +451,9 @@ function ThresholdsTab() {
         {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         Save thresholds &amp; conditions
       </Button>
+      <p className="text-xs text-muted-foreground">
+        After saving, open the Recompute tab and run the months that should use the new rules.
+      </p>
     </div>
   );
 }
@@ -724,11 +770,14 @@ function RecomputeCard() {
 export default function ConfigPage() {
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-          <Settings className="h-7 w-7" /> Configuration
-        </h1>
-        <p className="text-muted-foreground">Schedules, policies, holidays and leaves.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+            <Settings className="h-7 w-7" /> Configuration
+          </h1>
+          <p className="text-muted-foreground">Schedules, policies, holidays and leaves.</p>
+        </div>
+        <UserGuide variant="header" />
       </div>
 
       <Tabs defaultValue="schedule">

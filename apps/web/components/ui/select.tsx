@@ -59,22 +59,32 @@ SelectContent.displayName = SelectPrimitive.Content.displayName;
 
 export const SelectItem = forwardRef<
   ElementRef<typeof SelectPrimitive.Item>,
-  ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & { description?: string }
+>(({ className, children, description, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
       'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      description && 'h-auto items-start whitespace-normal py-2',
       className,
     )}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span className={cn('absolute left-2 flex h-3.5 w-3.5 items-center justify-center', description && 'top-2.5')}>
       <SelectPrimitive.ItemIndicator>
         <Check className="h-4 w-4" />
       </SelectPrimitive.ItemIndicator>
     </span>
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    <SelectPrimitive.ItemText>
+      {description ? (
+        <span className="flex flex-col gap-0.5">
+          <span className="font-medium leading-snug">{children}</span>
+          <span className="text-xs font-normal leading-snug text-muted-foreground">{description}</span>
+        </span>
+      ) : (
+        children
+      )}
+    </SelectPrimitive.ItemText>
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;

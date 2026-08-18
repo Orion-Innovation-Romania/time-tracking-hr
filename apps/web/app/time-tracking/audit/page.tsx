@@ -6,6 +6,7 @@ import { ScrollText } from 'lucide-react';
 import type { AuditLogView } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { useSession } from '@/lib/session';
+import { UserGuide } from '@/components/user-guide';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -83,7 +84,7 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
             <ScrollText className="h-7 w-7" /> Audit log
@@ -94,23 +95,26 @@ export default function AuditPage() {
               : 'A history of every action you have performed in the portal.'}
           </p>
         </div>
-        {isAdmin && (
-          <div className="w-56">
-            <Select value={userFilter} onValueChange={setUserFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All users" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All users</SelectItem>
-                {users.data?.map((u) => (
-                  <SelectItem key={u.id} value={String(u.id)}>
-                    {u.username}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <UserGuide variant="header" />
+          {isAdmin && (
+            <div className="w-56">
+              <Select value={userFilter} onValueChange={setUserFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All users" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All users</SelectItem>
+                  {users.data?.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.username}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
       </div>
 
       <Card>

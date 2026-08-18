@@ -140,7 +140,7 @@ export default function TimeTrackingLayout({ children }: { children: ReactNode }
       </aside>
 
       <main className="flex-1 overflow-x-hidden">
-        <div className="mx-auto max-w-7xl p-8">{children}</div>
+        <div className="mx-auto max-w-7xl px-8 py-6">{children}</div>
       </main>
     </div>
   );

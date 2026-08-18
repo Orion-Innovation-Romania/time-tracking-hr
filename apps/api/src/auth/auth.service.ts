@@ -1,14 +1,26 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import type { Request } from 'express';
 import type { SessionUser } from '@ttah/shared';
+import { AuditService } from '../audit/audit.service';
+import { resolvePublicAppUrl } from '../common/public-app-url';
 import type { JwtConfig } from '../config/configuration';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
+import {
+  PASSWORD_RESET_TTL_MINUTES,
+  PASSWORD_RESET_TTL_MS,
+  generatePasswordResetToken,
+  hashPasswordResetToken,
+  passwordResetHashesEqual,
+} from './password-reset-token';
 
 export interface RequestContext {
   ip?: string | null;
@@ -22,11 +34,15 @@ export interface TokenPair {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersService,
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly mail: MailService,
+    private readonly audit: AuditService,
   ) {}
 
   async validateUser(username: string, password: string, ctx: RequestContext) {
@@ -99,6 +115,89 @@ export class AuthService {
     const ok = await this.users.verify(user.passwordHash, currentPassword);
     if (!ok) throw new BadRequestException('Current password is incorrect');
     await this.users.setPassword(userId, newPassword, false);
+  }
+
+  /**
+   * Always returns ok. Does not reveal whether the email exists.
+   * Sends a one-time link when the account is active and has that email.
+   */
+  async requestPasswordReset(email: string, appUrl: string): Promise<{ ok: true }> {
+    const user = await this.users.findByEmail(email);
+    if (!user?.isActive || !user.email) return { ok: true };
+    if (!appUrl) {
+      this.logger.error('Cannot send password reset: public app URL is not configured');
+      return { ok: true };
+    }
+
+    const { raw, hash } = generatePasswordResetToken();
+    await this.users.storePasswordResetToken(
+      user.id,
+      hash,
+      new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+    );
+
+    const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(raw)}`;
+    try {
+      await this.mail.sendPasswordReset({
+        to: user.email,
+        username: user.username,
+        resetUrl,
+        expiresMinutes: PASSWORD_RESET_TTL_MINUTES,
+      });
+      await this.audit.log({
+        userId: user.id,
+        action: 'request-password-reset',
+        entity: 'User',
+        entityId: user.id,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to send password reset to ${user.username}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+    return { ok: true };
+  }
+
+  async peekPasswordResetToken(rawToken: string): Promise<{ ok: true }> {
+    await this.requireValidResetUser(rawToken);
+    return { ok: true };
+  }
+
+  async completePasswordReset(rawToken: string, newPassword: string): Promise<{ ok: true }> {
+    const user = await this.requireValidResetUser(rawToken);
+    const same = await this.users.verify(user.passwordHash, newPassword);
+    if (same) {
+      throw new BadRequestException('New password must be different from the current one');
+    }
+    await this.users.setPassword(user.id, newPassword, false);
+    await this.audit.log({
+      userId: user.id,
+      action: 'complete-password-reset',
+      entity: 'User',
+      entityId: user.id,
+    });
+    return { ok: true };
+  }
+
+  private async requireValidResetUser(rawToken: string) {
+    const hash = hashPasswordResetToken(rawToken);
+    const user = await this.users.findByPasswordResetTokenHash(hash);
+    const now = Date.now();
+    if (!user?.isActive || !user.passwordResetTokenHash || !user.passwordResetExpiresAt) {
+      throw new BadRequestException('This reset link is invalid or has expired.');
+    }
+    if (user.passwordResetExpiresAt.getTime() <= now) {
+      throw new BadRequestException('This reset link is invalid or has expired.');
+    }
+    if (!passwordResetHashesEqual(user.passwordResetTokenHash, hash)) {
+      throw new BadRequestException('This reset link is invalid or has expired.');
+    }
+    return user;
+  }
+
+  /** Browser origin for reset links. Prefer config; fall back to forwarded host. */
+  resolveAppUrl(req: Request): string {
+    return resolvePublicAppUrl(this.config, req);
   }
 
   toSessionUser(user: {

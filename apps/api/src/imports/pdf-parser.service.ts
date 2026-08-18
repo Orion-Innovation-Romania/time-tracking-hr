@@ -3,22 +3,9 @@ import pdfParse from 'pdf-parse';
 import type { DoorRole, EventType } from '@ttah/shared';
 import { parseLocation, isValidAxTraxLocation } from '../doors/location';
 import { parseReportDateTime } from '../common/time';
+import type { ParsedRecord, ParsedReport } from './parsed-report';
 
-export interface ParsedRecord {
-  occurredAt: Date;
-  rawLocation: string;
-  direction: DoorRole;
-  eventType: EventType;
-}
-
-export interface ParsedReport {
-  rawUserName: string | null;
-  department: string | null;
-  rangeFrom: Date | null;
-  rangeTo: Date | null;
-  records: ParsedRecord[];
-  warnings: string[];
-}
+export type { ParsedRecord, ParsedReport } from './parsed-report';
 
 const DATETIME = /\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}/;
 const EVENT = /Access Granted|Access Denied/i;
@@ -87,7 +74,18 @@ export class PdfParserService {
     const rangeFrom = from ?? (times.length ? new Date(Math.min(...times)) : null);
     const rangeTo = to ?? (times.length ? new Date(Math.max(...times)) : null);
 
-    return { rawUserName, department, rangeFrom, rangeTo, records, warnings };
+    return {
+      kind: 'single',
+      rawUserName,
+      department,
+      rangeFrom,
+      rangeTo,
+      records,
+      employees: rawUserName
+        ? [{ rawUserName, department, eventCount: records.length }]
+        : [],
+      warnings,
+    };
   }
 
   private extractUserName(lines: string[]): string | null {

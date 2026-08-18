@@ -10,6 +10,7 @@ import {
   TriangleAlert,
   Upload,
   UserCheck,
+  Users,
 } from 'lucide-react';
 import type {
   EmployeeView,
@@ -21,6 +22,7 @@ import { api, apiUpload, ApiRequestError } from '@/lib/api';
 import { formatClock, formatDate } from '@/lib/utils';
 import { useEmployees } from '@/lib/hooks';
 import { useToast } from '@/components/ui/toast';
+import { UserGuide } from '@/components/user-guide';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -88,7 +90,9 @@ export default function ImportPage() {
     onSuccess: (result) => {
       toast({
         title: 'Import committed',
-        description: `${result.rowsNew} new rows, ${result.rowsDuplicate} duplicates.`,
+        description: `${result.rowsNew} new rows, ${result.rowsDuplicate} duplicates${
+          result.employeeCount > 1 ? ` · ${result.employeeCount} employees` : ''
+        }.`,
         variant: 'success',
       });
       setPreview(null);
@@ -120,11 +124,14 @@ export default function ImportPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Import access report</h1>
-        <p className="text-muted-foreground">
-          Upload an AxTraxNG PDF.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Import access report</h1>
+          <p className="text-muted-foreground">
+            Upload an AxTraxNG PDF (one person) or CSV (all employees).
+          </p>
+        </div>
+        <UserGuide variant="header" />
       </div>
 
       <Card
@@ -141,12 +148,12 @@ export default function ImportPage() {
             <Upload className="h-7 w-7" />
           </div>
           <p className="text-sm text-muted-foreground">
-            Drag &amp; drop a PDF here, or
+            Drag &amp; drop a PDF or CSV here, or
           </p>
           <input
             ref={fileInput}
             type="file"
-            accept="application/pdf,.pdf"
+            accept="application/pdf,.pdf,text/csv,.csv,application/vnd.ms-excel"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -160,7 +167,7 @@ export default function ImportPage() {
             ) : (
               <FileText className="h-4 w-4" />
             )}
-            Choose PDF
+            Choose file
           </Button>
         </CardContent>
       </Card>
@@ -169,17 +176,27 @@ export default function ImportPage() {
         <Card className="animate-fade-in">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <UserCheck className="h-5 w-5" /> Preview: {preview.fileName}
+              {preview.kind === 'multi' ? (
+                <Users className="h-5 w-5" />
+              ) : (
+                <UserCheck className="h-5 w-5" />
+              )}{' '}
+              Preview: {preview.fileName}
             </CardTitle>
             <CardDescription>
-              {preview.rawUserName ? (
+              {preview.kind === 'multi' ? (
+                <>
+                  {preview.employees.length} employee
+                  {preview.employees.length === 1 ? '' : 's'}
+                </>
+              ) : preview.rawUserName ? (
                 <>
                   Detected user <strong>{preview.rawUserName}</strong>
                 </>
               ) : (
                 'No employee name detected in the report header'
               )}
-              {preview.department ? ` · ${preview.department}` : ''}
+              {preview.kind !== 'multi' && preview.department ? ` · ${preview.department}` : ''}
               {preview.rangeFrom && preview.rangeTo
                 ? ` · ${formatDate(preview.rangeFrom.slice(0, 10))} → ${formatDate(
                     preview.rangeTo.slice(0, 10),
@@ -188,7 +205,7 @@ export default function ImportPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className={`grid gap-4 ${preview.kind === 'multi' ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
               <div className="rounded-lg border p-4">
                 <p className="text-xs text-muted-foreground">Rows parsed</p>
                 <p className="text-2xl font-bold">
@@ -198,6 +215,12 @@ export default function ImportPage() {
                   </span>
                 </p>
               </div>
+              {preview.kind === 'multi' && (
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs text-muted-foreground">Employees</p>
+                  <p className="text-2xl font-bold">{preview.employees.length}</p>
+                </div>
+              )}
               <div className="rounded-lg border p-4">
                 <p className="text-xs text-muted-foreground">New readers</p>
                 <p className="text-2xl font-bold">{preview.newDoors.length}</p>
@@ -225,48 +248,91 @@ export default function ImportPage() {
               </div>
             )}
 
-            <div className="max-w-md space-y-2">
-              <label className="text-sm font-medium">Assign to employee</label>
-              <Select value={overrideEmployee} onValueChange={setOverrideEmployee}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Auto-create from report name" />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.data?.map((e: EmployeeView) => (
-                    <SelectItem key={e.id} value={String(e.id)}>
-                      {e.displayName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {preview.matchedEmployeeId
-                  ? `Matched existing employee${
-                      employeeName(preview.matchedEmployeeId)
-                        ? `: ${employeeName(preview.matchedEmployeeId)}`
-                        : ''
-                    }.`
-                  : 'No match found — pick an existing employee above, or type a name below to create a new one.'}
-              </p>
-            </div>
-
-            {!overrideEmployee && (
-              <div className="max-w-md space-y-2">
-                <label className="text-sm font-medium">
-                  New employee name{' '}
-                  {!preview.rawUserName && <span className="text-destructive">*</span>}
-                </label>
-                <Input
-                  value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
-                  placeholder="e.g. Popescu, Ion"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {preview.rawUserName
-                    ? 'Pre-filled from the report. Edit it if it looks wrong.'
-                    : "The report header didn't contain a usable name — enter one manually."}
+            {preview.kind === 'multi' ? (
+              <div>
+                <p className="mb-2 text-sm font-medium">Employees in this report</p>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Names are taken from AxTraxNG. Existing people are matched automatically; new
+                  names are created on commit. Re-uploading a later export of the same day only
+                  adds new badge reads.
                 </p>
+                <div className="max-h-72 overflow-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead className="text-right">Events</TableHead>
+                        <TableHead>Match</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {preview.employees.map((emp) => (
+                        <TableRow key={emp.rawUserName}>
+                          <TableCell className="font-medium">{emp.rawUserName}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {emp.department ?? '—'}
+                          </TableCell>
+                          <TableCell className="text-right">{emp.eventCount}</TableCell>
+                          <TableCell>
+                            {emp.matchedEmployeeId ? (
+                              <Badge variant="success">Existing</Badge>
+                            ) : (
+                              <Badge variant="secondary">New</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="max-w-md space-y-2">
+                  <label className="text-sm font-medium">Assign to employee</label>
+                  <Select value={overrideEmployee} onValueChange={setOverrideEmployee}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Auto-create from report name" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.data?.map((e: EmployeeView) => (
+                        <SelectItem key={e.id} value={String(e.id)}>
+                          {e.displayName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {preview.matchedEmployeeId
+                      ? `Matched existing employee${
+                          employeeName(preview.matchedEmployeeId)
+                            ? `: ${employeeName(preview.matchedEmployeeId)}`
+                            : ''
+                        }.`
+                      : 'No match found — pick an existing employee above, or type a name below to create a new one.'}
+                  </p>
+                </div>
+
+                {!overrideEmployee && (
+                  <div className="max-w-md space-y-2">
+                    <label className="text-sm font-medium">
+                      New employee name{' '}
+                      {!preview.rawUserName && <span className="text-destructive">*</span>}
+                    </label>
+                    <Input
+                      value={manualName}
+                      onChange={(e) => setManualName(e.target.value)}
+                      placeholder="e.g. Popescu, Ion"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {preview.rawUserName
+                        ? 'Pre-filled from the report. Edit it if it looks wrong.'
+                        : "The report header didn't contain a usable name — enter one manually."}
+                    </p>
+                  </div>
+                )}
+              </>
             )}
 
             {preview.newDoors.length > 0 && (
@@ -320,7 +386,9 @@ export default function ImportPage() {
                 disabled={
                   commitMutation.isPending ||
                   !!preview.duplicateOfBatchId ||
-                  (!overrideEmployee && !manualName.trim())
+                  (preview.kind === 'multi'
+                    ? preview.employees.length === 0
+                    : !overrideEmployee && !manualName.trim())
                 }
               >
                 {commitMutation.isPending ? (

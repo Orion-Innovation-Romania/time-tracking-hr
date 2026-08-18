@@ -6,7 +6,7 @@ import { useCallback } from 'react';
 import type { SessionUser } from '@ttah/shared';
 import { api, ApiRequestError, isServiceUnavailable } from './api';
 
-export function useSession() {
+export function useSession(options?: { enabled?: boolean }) {
   return useQuery<SessionUser | null>({
     queryKey: ['session'],
     queryFn: async () => {
@@ -19,6 +19,7 @@ export function useSession() {
     },
     staleTime: 60_000,
     retry: (count, err) => isServiceUnavailable(err) && count < 2,
+    enabled: options?.enabled ?? true,
   });
 }
 

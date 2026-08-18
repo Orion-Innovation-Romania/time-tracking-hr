@@ -7,6 +7,7 @@ import type { EmployeeView } from '@ttah/shared';
 import { api } from '@/lib/api';
 import { useEmployees } from '@/lib/hooks';
 import { useToast } from '@/components/ui/toast';
+import { UserGuide } from '@/components/user-guide';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -203,7 +204,7 @@ function EmployeeDialog({
 export default function EmployeesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const employees = useEmployees();
+  const employees = useEmployees(true);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<EmployeeView | null>(null);
   const [confirmEmployee, setConfirmEmployee] = useState<EmployeeView | null>(null);
@@ -233,19 +234,22 @@ export default function EmployeesPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-            <Users className="h-7 w-7" /> Employees
-          </h1>
-          <p className="text-muted-foreground">
-            Manage display names and work schedules. Delete removes the person and all their hours.
-          </p>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+              <Users className="h-7 w-7" /> Employees
+            </h1>
+            <p className="text-muted-foreground">
+              Manage display names and work schedules. Delete removes the person and all their hours.
+            </p>
+          </div>
+          <UserGuide variant="header" />
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="w-64 pl-9"
+            className="w-full pl-9"
             placeholder="Search employees…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}

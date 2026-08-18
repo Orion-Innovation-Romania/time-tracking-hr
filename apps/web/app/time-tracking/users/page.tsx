@@ -4,11 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { KeyRound, Loader2, Plus, Shield, Trash2, UserRound } from 'lucide-react';
-import type { Role, UserAccountView } from '@ttah/shared';
+import type { CreateUserResult, Role, UpdateUserResult, UserAccountView, WelcomeEmailStatus } from '@ttah/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { useSession } from '@/lib/session';
 import { useToast } from '@/components/ui/toast';
+import { UserGuide } from '@/components/user-guide';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -47,6 +48,18 @@ function formatWhen(iso: string | null): string {
   } catch {
     return formatDate(iso.slice(0, 10));
   }
+}
+
+function passwordEmailNote(
+  status: WelcomeEmailStatus | undefined,
+  error: string | null | undefined,
+  email: string | null,
+): string {
+  if (status === 'sent') return `Password emailed to ${email}.`;
+  if (status === 'failed') {
+    return `Password was saved, but the email failed${error ? `: ${error}` : '.'} Share it yourself.`;
+  }
+  return `Password was saved. Email was not sent${error ? ` (${error})` : ''}. Share it yourself.`;
 }
 
 export default function UsersAdminPage() {
@@ -91,7 +104,7 @@ export default function UsersAdminPage() {
 
   const create = useMutation({
     mutationFn: () =>
-      api<UserAccountView>('/users', {
+      api<CreateUserResult>('/users', {
         method: 'POST',
         body: { username, firstName, lastName, email, role, initialPassword },
       }),
@@ -103,33 +116,20 @@ export default function UsersAdminPage() {
       setEmail('');
       setInitialPassword('');
       setRole('user');
+      const emailNote =
+        user.welcomeEmail === 'sent'
+          ? `Welcome email sent to ${user.email}.`
+          : user.welcomeEmail === 'failed'
+            ? `Account created, but the welcome email failed${user.welcomeEmailError ? `: ${user.welcomeEmailError}` : '.'} Share the initial password yourself.`
+            : `Account created. Welcome email was not sent${user.welcomeEmailError ? ` (${user.welcomeEmailError})` : ''}. Share the initial password yourself.`;
       toast({
         title: 'User created',
-        description: `${user.username} must change password on first login.`,
+        description: `${user.username} must change password on first login. ${emailNote}`,
       });
     },
     onError: (err) => {
       toast({
         title: 'Create failed',
-        description: err instanceof ApiRequestError ? err.message : 'Unknown error',
-        variant: 'error',
-      });
-    },
-  });
-
-  const resetPassword = useMutation({
-    mutationFn: (id: number) =>
-      api<{ ok: true }>(`/users/${id}/reset-password`, { method: 'POST' }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast({
-        title: 'Password reset',
-        description: 'User must sign in with the initial password and set a new one.',
-      });
-    },
-    onError: (err) => {
-      toast({
-        title: 'Reset failed',
         description: err instanceof ApiRequestError ? err.message : 'Unknown error',
         variant: 'error',
       });
@@ -162,7 +162,7 @@ export default function UsersAdminPage() {
 
   const setInitial = useMutation({
     mutationFn: ({ id, initialPassword }: { id: number; initialPassword: string }) =>
-      api<UserAccountView>(`/users/${id}`, {
+      api<UpdateUserResult>(`/users/${id}`, {
         method: 'PATCH',
         body: { initialPassword },
       }),
@@ -170,7 +170,7 @@ export default function UsersAdminPage() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({
         title: 'Initial password updated',
-        description: `${user.username} must sign in with the new initial password and change it.`,
+        description: `${user.username} must sign in with the new password and change it. ${passwordEmailNote(user.passwordEmail, user.passwordEmailError, user.email)}`,
       });
     },
     onError: (err) => {
@@ -223,15 +223,17 @@ export default function UsersAdminPage() {
   }
 
   const rows = users.data ?? [];
-  const pending = rows.filter((u) => u.passwordResetRequestedAt);
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Users</h1>
-        <p className="text-sm text-muted-foreground">
-          Create, edit or delete accounts. Changes are written to <code>config/users.yml</code>.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Users</h1>
+          <p className="text-sm text-muted-foreground">
+            Create, edit or delete accounts. Changes are written to <code>config/users.yml</code>.
+          </p>
+        </div>
+        <UserGuide variant="header" />
       </div>
 
       {pending.length > 0 && (
@@ -274,8 +276,8 @@ export default function UsersAdminPage() {
             <Plus className="h-4 w-4" /> Create user
           </CardTitle>
           <CardDescription>
-            Initial password must be at least 10 characters, with a letter and a digit. The user
-            must change it on first login.
+            Initial password must be at least 10 characters, with a letter and a digit. We email
+            the new user a sign-in link and this password; they must change it on first login.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -312,9 +314,12 @@ export default function UsersAdminPage() {
                 id="new-email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value.toLowerCase())}
                 required
                 autoComplete="off"
+                placeholder="name@orioninc.com"
+                pattern="[^@\s]+@orioninc\.com"
+                title="Only @orioninc.com addresses are allowed"
               />
             </div>
             <div className="space-y-2">
@@ -343,11 +348,12 @@ export default function UsersAdminPage() {
               <Label htmlFor="new-password">Initial password</Label>
               <Input
                 id="new-password"
-                type="password"
+                type="text"
                 value={initialPassword}
                 onChange={(e) => setInitialPassword(e.target.value)}
                 required
-                autoComplete="new-password"
+                autoComplete="off"
+                spellCheck={false}
               />
               <p className={initialPassword.includes(' ') ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
                 Minimum 10 chars, include a letter and a digit; spaces are not allowed.
@@ -403,8 +409,11 @@ export default function UsersAdminPage() {
                   id="edit-email"
                   type="email"
                   value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
+                  onChange={(e) => setEditEmail(e.target.value.toLowerCase())}
                   required
+                  placeholder="name@orioninc.com"
+                  pattern="[^@\s]+@orioninc\.com"
+                  title="Only @orioninc.com addresses are allowed"
                 />
               </div>
               <div className="flex gap-2 sm:col-span-3">
@@ -565,9 +574,6 @@ export default function UsersAdminPage() {
                           {u.isActive ? 'active' : 'inactive'}
                         </Badge>
                         {u.mustChangePassword && <Badge variant="outline">must change</Badge>}
-                        {u.passwordResetRequestedAt && (
-                          <Badge variant="destructive">reset requested</Badge>
-                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -597,7 +603,7 @@ export default function UsersAdminPage() {
                             setSetInitialOpen(true);
                           }}
                         >
-                          Set initial
+                          <KeyRound className="h-3.5 w-3.5" /> Set initial
                         </Button>
                         <Button
                           size="sm"

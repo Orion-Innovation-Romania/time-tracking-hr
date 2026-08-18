@@ -20,6 +20,7 @@ export interface AppConfiguration {
   tz: string;
   jwt: JwtConfig;
   cookieSecure: boolean;
+  publicAppUrl: string;
   login: { maxAttempts: number; lockMinutes: number };
   usersConfigPath: string;
   uploadTmpDir: string;
@@ -37,6 +38,7 @@ export default (): AppConfiguration => ({
     refreshTtl: parseInt(process.env.JWT_REFRESH_TTL ?? '604800', 10),
   },
   cookieSecure: (process.env.COOKIE_SECURE ?? 'false').toLowerCase() === 'true',
+  publicAppUrl: firstHttpOrigin(process.env.PUBLIC_APP_URL) || firstHttpOrigin(process.env.CORS_ORIGIN),
   login: {
     maxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS ?? '5', 10),
     lockMinutes: parseInt(process.env.LOGIN_LOCK_MINUTES ?? '15', 10),
@@ -56,3 +58,17 @@ export default (): AppConfiguration => ({
     fromName: process.env.MAIL_FROM_NAME || 'DPD-ROU-Hr-Recruitment',
   },
 });
+
+/** First http(s) origin from PUBLIC_APP_URL or CORS_ORIGIN. Empty when unset or `*`. */
+function firstHttpOrigin(raw?: string): string {
+  if (!raw) return '';
+  const first = raw.split(',')[0]?.trim() ?? '';
+  if (!first || first === '*') return '';
+  try {
+    const url = new URL(first);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    return url.origin;
+  } catch {
+    return '';
+  }
+}

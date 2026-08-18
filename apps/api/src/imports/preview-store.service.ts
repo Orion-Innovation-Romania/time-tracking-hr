@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { ParsedReport } from './pdf-parser.service';
+import type { ParsedReport } from './parsed-report';
 
 export interface PreviewEntry {
   previewId: string;

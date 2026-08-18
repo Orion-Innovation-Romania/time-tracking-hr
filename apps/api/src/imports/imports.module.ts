@@ -5,12 +5,13 @@ import { EmployeesModule } from '../employees/employees.module';
 import { ImportsController } from './imports.controller';
 import { ImportsService } from './imports.service';
 import { PdfParserService } from './pdf-parser.service';
+import { CsvParserService } from './csv-parser.service';
 import { PreviewStore } from './preview-store.service';
 
 @Module({
   imports: [AttendanceModule, EmployeesModule, DoorsModule],
   controllers: [ImportsController],
-  providers: [ImportsService, PdfParserService, PreviewStore],
+  providers: [ImportsService, PdfParserService, CsvParserService, PreviewStore],
   exports: [PdfParserService],
 })
 export class ImportsModule {}

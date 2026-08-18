@@ -53,15 +53,16 @@ export function DateRangePicker({
   };
 
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={monthId} className="text-xs text-muted-foreground">
+    <div className="relative">
+      <Label htmlFor={monthId} className="sr-only">
         Month
       </Label>
-      <div className="flex items-center gap-1">
+      <div className="flex h-14 items-center gap-1">
         <Button
           type="button"
           variant="outline"
           size="icon"
+          className="h-14 w-11"
           aria-label="Previous month"
           onClick={() => apply(shiftMonth(year, month, -1))}
         >
@@ -70,7 +71,7 @@ export function DateRangePicker({
         <Input
           id={monthId}
           type="month"
-          className="w-44"
+          className="h-14 w-44"
           value={ymKey(year, month)}
           max={maxYm}
           onChange={(e) => {
@@ -82,6 +83,7 @@ export function DateRangePicker({
           type="button"
           variant="outline"
           size="icon"
+          className="h-14 w-11"
           aria-label="Next month"
           disabled={inProgress}
           onClick={() => apply(shiftMonth(year, month, 1))}
@@ -89,7 +91,14 @@ export function DateRangePicker({
           <ChevronRight />
         </Button>
       </div>
-      {inProgress && <Badge variant="secondary">Month in progress</Badge>}
+      {inProgress ? (
+        <Badge
+          variant="secondary"
+          className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2"
+        >
+          Month in progress
+        </Badge>
+      ) : null}
     </div>
   );
 }

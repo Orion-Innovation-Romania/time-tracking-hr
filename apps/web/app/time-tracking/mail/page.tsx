@@ -8,6 +8,7 @@ import type { MailConfigView, SendTestMailInput } from '@ttah/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { useToast } from '@/components/ui/toast';
+import { UserGuide } from '@/components/user-guide';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +32,7 @@ export default function MailAdminPage() {
   const [fromName, setFromName] = useState('');
   const [reportRecipient, setReportRecipient] = useState('');
   const [sendReportByDefault, setSendReportByDefault] = useState(false);
+  const [problemReportRecipient, setProblemReportRecipient] = useState('');
 
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
@@ -59,6 +61,7 @@ export default function MailAdminPage() {
     setFromName(config.data.fromName);
     setReportRecipient(config.data.reportRecipient);
     setSendReportByDefault(config.data.sendReportByDefault);
+    setProblemReportRecipient(config.data.problemReportRecipient ?? '');
   }, [config.data]);
 
   const save = useMutation({
@@ -74,12 +77,14 @@ export default function MailAdminPage() {
           fromName,
           reportRecipient,
           sendReportByDefault,
+          problemReportRecipient,
           ...(clientSecret.trim() ? { clientSecret: clientSecret.trim() } : {}),
         },
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['mail', 'config'], data);
       queryClient.invalidateQueries({ queryKey: ['mail', 'report-policy'] });
+      queryClient.invalidateQueries({ queryKey: ['mail', 'problem-report-policy'] });
       setClientSecret('');
       toast({ title: 'Mail settings saved', variant: 'success' });
     },
@@ -142,12 +147,15 @@ export default function MailAdminPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Mail</h1>
-        <p className="text-sm text-muted-foreground">
-          Send mail through Microsoft Graph, same as Inventory. Configure the Azure app and
-          mailbox, then send a test message.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Mail</h1>
+          <p className="text-sm text-muted-foreground">
+            Send mail through Microsoft Graph, same as Inventory. Configure the Azure app and
+            mailbox, then send a test message.
+          </p>
+        </div>
+        <UserGuide variant="header" />
       </div>
 
       <Card>
@@ -177,6 +185,11 @@ export default function MailAdminPage() {
                 <span className="text-sm text-muted-foreground">
                   reports → {view.reportRecipient}
                   {view.sendReportByDefault ? ' (default on)' : ''}
+                </span>
+              )}
+              {view?.problemReportRecipient && (
+                <span className="text-sm text-muted-foreground">
+                  problems → {view.problemReportRecipient}
                 </span>
               )}
               {view?.senderMailbox && (
@@ -282,6 +295,51 @@ export default function MailAdminPage() {
                   <Save className="h-4 w-4" />
                 )}
                 Save delivery
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Problem reports</CardTitle>
+          <CardDescription>
+            Where “Report a problem” emails go. This is the development team, not the HR export
+            recipients above.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            className="grid gap-4 sm:grid-cols-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              save.mutate();
+            }}
+          >
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="mail-problem-to">Dev team recipient</Label>
+              <Input
+                id="mail-problem-to"
+                type="text"
+                value={problemReportRecipient}
+                onChange={(e) => setProblemReportRecipient(e.target.value)}
+                placeholder="dev@orioninc.com"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                One address, or several separated by commas. Users send a screenshot of the page
+                plus what they wanted, what happened, and what should have happened.
+              </p>
+            </div>
+            <div>
+              <Button type="submit" disabled={save.isPending || config.isLoading}>
+                {save.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save recipients
               </Button>
             </div>
           </form>
@@ -409,8 +467,8 @@ export default function MailAdminPage() {
         <CardHeader>
           <CardTitle className="text-base">Send test email</CardTitle>
           <CardDescription>
-            Sends a plain-text message through Graph. Use this before wiring mail into other
-            flows.
+            Sends a branded HTML message through Graph — same look as welcome and report emails.
+            Use this before wiring mail into other flows.
           </CardDescription>
         </CardHeader>
         <CardContent>

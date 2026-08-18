@@ -24,9 +24,11 @@ export class ImportsController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
   preview(@UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
-    const isPdf = /pdf$/i.test(file.mimetype) || /\.pdf$/i.test(file.originalname);
-    if (!isPdf) throw new BadRequestException('Only PDF files are supported');
-    return this.imports.preview({ originalname: file.originalname, buffer: file.buffer });
+    return this.imports.preview({
+      originalname: file.originalname,
+      buffer: file.buffer,
+      mimetype: file.mimetype,
+    });
   }
 
   @Post('commit')

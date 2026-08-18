@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import {
   BadRequestException,
   HttpException,
@@ -13,12 +14,26 @@ import {
   parseMailRecipients,
   type MailConfigInput,
   type MailConfigView,
+  type MailProblemReportPolicy,
   type MailReportPolicy,
+  type ProblemReportResult,
   type SendTestMailInput,
+  type SessionUser,
 } from '@ttah/shared';
 import { AuditService } from '../audit/audit.service';
 import type { MailGraphEnvConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  EMAIL_BANNER_CID,
+  EMAIL_BANNER_NAME,
+  adminSetPasswordEmailHtml,
+  loadEmailBanner,
+  passwordResetEmailHtml,
+  problemReportEmailHtml,
+  reportExportEmailHtml,
+  testEmailHtml,
+  welcomeAccountEmailHtml,
+} from './email-templates';
 
 interface StoredMailConfig {
   authority?: string;
@@ -30,6 +45,7 @@ interface StoredMailConfig {
   fromName?: string;
   reportRecipient?: string;
   sendReportByDefault?: boolean;
+  problemReportRecipient?: string;
 }
 
 interface ResolvedMailConfig {
@@ -42,6 +58,7 @@ interface ResolvedMailConfig {
   fromName: string;
   reportRecipient: string;
   sendReportByDefault: boolean;
+  problemReportRecipient: string;
 }
 
 interface GraphEmailAddress {
@@ -54,6 +71,8 @@ interface GraphAttachment {
   name: string;
   contentType: string;
   contentBytes: string;
+  contentId?: string;
+  isInline?: boolean;
 }
 
 interface GraphMailRequest {
@@ -74,7 +93,13 @@ export interface SendMailOptions {
   subject: string;
   body: string;
   contentType?: 'Text' | 'HTML';
-  attachments?: { name: string; contentType: string; content: Buffer | Uint8Array }[];
+  attachments?: {
+    name: string;
+    contentType: string;
+    content: Buffer | Uint8Array;
+    contentId?: string;
+    isInline?: boolean;
+  }[];
 }
 
 export interface GeneratedExportMail {
@@ -126,6 +151,7 @@ export class MailService {
       fromName: resolved.fromName,
       reportRecipient: resolved.reportRecipient,
       sendReportByDefault: resolved.sendReportByDefault,
+      problemReportRecipient: resolved.problemReportRecipient,
       hasClientSecret: Boolean(resolved.clientSecret),
       configured: this.isConfigured(resolved),
     };
@@ -143,6 +169,7 @@ export class MailService {
       fromName: parsed.fromName?.trim() ?? '',
       reportRecipient: parsed.reportRecipient?.trim() ?? '',
       sendReportByDefault: parsed.sendReportByDefault ?? false,
+      problemReportRecipient: parsed.problemReportRecipient?.trim() ?? '',
       clientSecret: parsed.clientSecret?.trim()
         ? parsed.clientSecret.trim()
         : before?.clientSecret,
@@ -178,6 +205,95 @@ export class MailService {
     };
   }
 
+  async getProblemReportPolicy(): Promise<MailProblemReportPolicy> {
+    const resolved = await this.resolveConfig();
+    const recipients = parseMailRecipients(resolved.problemReportRecipient);
+    return {
+      canSend: this.isConfigured(resolved) && recipients.length > 0,
+    };
+  }
+
+  async sendProblemReport(input: {
+    user: SessionUser;
+    intendedAction: string;
+    whatHappened: string;
+    expected: string;
+    pageUrl: string;
+    viewport: string;
+    userAgent: string;
+    screenshot?: { buffer: Buffer; contentType: string; filename: string };
+  }): Promise<ProblemReportResult> {
+    const cfg = await this.resolveConfig();
+    const recipients = parseMailRecipients(cfg.problemReportRecipient);
+    if (!this.isConfigured(cfg) || recipients.length === 0) {
+      throw new BadRequestException(
+        'Problem report recipients are not configured in Mail settings.',
+      );
+    }
+
+    const id = `TTAH-PR-${randomBytes(4).toString('hex')}`;
+    const account = await this.prisma.user.findUnique({
+      where: { id: input.user.id },
+      select: { email: true },
+    });
+    const branded = this.brandedChrome();
+    const attachments = [...branded.attachments];
+
+    if (input.screenshot && input.screenshot.buffer.length > 0) {
+      if (input.screenshot.buffer.length > MAX_SIMPLE_ATTACHMENT_BYTES) {
+        this.logger.warn(
+          `Problem report ${id}: screenshot omitted (${input.screenshot.buffer.length} bytes)`,
+        );
+      } else {
+        attachments.push({
+          name: input.screenshot.filename,
+          contentType: input.screenshot.contentType.split(';')[0] || 'image/jpeg',
+          content: input.screenshot.buffer,
+        });
+      }
+    }
+
+    const hasScreenshot = attachments.some((att) => !att.isInline);
+    const pageUrl = input.pageUrl.trim();
+
+    await this.send({
+      to: recipients,
+      subject: `[TTAH] Problem report ${id} — ${input.user.username}`,
+      contentType: 'HTML',
+      body: problemReportEmailHtml({
+        referenceId: id,
+        username: input.user.username,
+        role: input.user.role,
+        email: account?.email ?? '',
+        pageUrl,
+        userAgent: input.userAgent,
+        viewport: input.viewport,
+        reportedAt: new Date().toISOString(),
+        intendedAction: input.intendedAction,
+        whatHappened: input.whatHappened,
+        expected: input.expected,
+        hasScreenshot,
+        appUrl: pageUrl || branded.appUrl,
+        includeBanner: branded.includeBanner,
+      }),
+      attachments,
+    });
+
+    await this.audit.log({
+      userId: input.user.id,
+      action: 'create',
+      entity: 'ProblemReport',
+      entityId: id,
+      after: {
+        pageUrl: pageUrl || null,
+        username: input.user.username,
+        hasScreenshot,
+      },
+    });
+
+    return { id };
+  }
+
   async sendGeneratedExport(file: GeneratedExportMail): Promise<{ recipients: string[] }> {
     const cfg = await this.resolveConfig();
     const recipients = parseMailRecipients(cfg.reportRecipient);
@@ -188,17 +304,23 @@ export class MailService {
     }
 
     const who = file.scopeLabel;
+    const branded = this.brandedChrome();
 
     await this.send({
       to: recipients,
       subject: `TTAH report: ${file.kind} for ${who} (${file.rangeFrom} – ${file.rangeTo})`,
-      body: [
-        `Please find attached the ${file.kind} report for ${who}, covering ${file.rangeFrom} to ${file.rangeTo}.`,
-        '',
-        'Generated from TTAH.',
-      ].join('\n'),
-      contentType: 'Text',
+      contentType: 'HTML',
+      body: reportExportEmailHtml({
+        kind: file.kind,
+        scopeLabel: who,
+        rangeFrom: file.rangeFrom,
+        rangeTo: file.rangeTo,
+        filename: file.filename,
+        appUrl: branded.appUrl,
+        includeBanner: branded.includeBanner,
+      }),
       attachments: [
+        ...branded.attachments,
         {
           name: file.filename,
           contentType: file.contentType.split(';')[0],
@@ -216,14 +338,96 @@ export class MailService {
   }
 
   async sendTest(input: SendTestMailInput): Promise<{ ok: true }> {
+    const branded = this.brandedChrome();
     await this.send({
       to: [input.to],
       cc: input.cc ? [input.cc] : undefined,
       subject: input.subject,
-      body: input.body,
-      contentType: 'Text',
+      contentType: 'HTML',
+      body: testEmailHtml({
+        body: input.body,
+        appUrl: branded.appUrl,
+        includeBanner: branded.includeBanner,
+      }),
+      attachments: branded.attachments,
     });
     return { ok: true };
+  }
+
+  async isReady(): Promise<boolean> {
+    const resolved = await this.resolveConfig();
+    return this.isConfigured(resolved);
+  }
+
+  async sendPasswordReset(input: {
+    to: string;
+    username: string;
+    resetUrl: string;
+    expiresMinutes: number;
+  }): Promise<void> {
+    const hoursLabel =
+      input.expiresMinutes % 60 === 0
+        ? `${input.expiresMinutes / 60} hour${input.expiresMinutes === 60 ? '' : 's'}`
+        : `${input.expiresMinutes} minutes`;
+    const branded = this.brandedChrome();
+    await this.send({
+      to: [input.to],
+      subject: 'Reset your TTAH password',
+      contentType: 'HTML',
+      body: passwordResetEmailHtml({
+        username: input.username,
+        resetUrl: input.resetUrl,
+        expiresLabel: hoursLabel,
+        includeBanner: branded.includeBanner,
+      }),
+      attachments: branded.attachments,
+    });
+  }
+
+  async sendAdminSetPassword(input: {
+    to: string;
+    firstName: string;
+    username: string;
+    initialPassword: string;
+    loginUrl: string;
+  }): Promise<void> {
+    const branded = this.brandedChrome();
+    await this.send({
+      to: [input.to],
+      subject: 'Your TTAH password was updated',
+      contentType: 'HTML',
+      body: adminSetPasswordEmailHtml({
+        firstName: input.firstName,
+        username: input.username,
+        initialPassword: input.initialPassword,
+        loginUrl: input.loginUrl,
+        includeBanner: branded.includeBanner,
+      }),
+      attachments: branded.attachments,
+    });
+  }
+
+  async sendWelcomeAccount(input: {
+    to: string;
+    firstName: string;
+    username: string;
+    initialPassword: string;
+    loginUrl: string;
+  }): Promise<void> {
+    const branded = this.brandedChrome();
+    await this.send({
+      to: [input.to],
+      subject: 'Your TTAH account is ready',
+      contentType: 'HTML',
+      body: welcomeAccountEmailHtml({
+        firstName: input.firstName,
+        username: input.username,
+        initialPassword: input.initialPassword,
+        loginUrl: input.loginUrl,
+        includeBanner: branded.includeBanner,
+      }),
+      attachments: branded.attachments,
+    });
   }
 
   async send(options: SendMailOptions): Promise<void> {
@@ -273,6 +477,8 @@ export class MailService {
           name: att.name,
           contentType: att.contentType,
           contentBytes: bytes.toString('base64'),
+          ...(att.contentId ? { contentId: att.contentId } : {}),
+          ...(att.isInline ? { isInline: true } : {}),
         };
       });
     }
@@ -416,6 +622,7 @@ export class MailService {
       fromName: stored?.fromName?.trim() || env.fromName,
       reportRecipient: stored?.reportRecipient?.trim() ?? '',
       sendReportByDefault: stored?.sendReportByDefault ?? false,
+      problemReportRecipient: stored?.problemReportRecipient?.trim() ?? '',
     };
   }
 
@@ -436,6 +643,30 @@ export class MailService {
         cfg.senderMailbox &&
         cfg.fromAddress,
     );
+  }
+
+  private brandedChrome(): {
+    includeBanner: boolean;
+    appUrl: string;
+    attachments: NonNullable<SendMailOptions['attachments']>;
+  } {
+    const banner = loadEmailBanner();
+    const appUrl = (this.config.get<string>('publicAppUrl') ?? '').replace(/\/+$/, '');
+    return {
+      includeBanner: Boolean(banner),
+      appUrl,
+      attachments: banner ? [this.inlineBanner(banner)] : [],
+    };
+  }
+
+  private inlineBanner(content: Buffer) {
+    return {
+      name: EMAIL_BANNER_NAME,
+      contentType: 'image/jpeg',
+      content,
+      contentId: EMAIL_BANNER_CID,
+      isInline: true,
+    };
   }
 
   private normalizeRecipients(list: string[]): string[] {

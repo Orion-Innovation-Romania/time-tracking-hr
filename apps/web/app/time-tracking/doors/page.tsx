@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { DOOR_ROLE_LABELS } from '@/lib/labels';
 import { useToast } from '@/components/ui/toast';
+import { UserGuide } from '@/components/user-guide';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -328,15 +329,18 @@ export default function DoorsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-          <DoorOpen className="h-7 w-7" /> Doors
-        </h1>
-        <p className="text-muted-foreground">
-          {canEdit
-            ? 'Every door from imported reports. Set name, office and floor here — readers belong to a door and can be edited from the expanded row.'
-            : 'Every door from imported reports. Expand a row to see its readers.'}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+            <DoorOpen className="h-7 w-7" /> Doors
+          </h1>
+          <p className="text-muted-foreground">
+            {canEdit
+              ? 'Every door from imported reports. Set name, office and floor here — readers belong to a door and can be edited from the expanded row.'
+              : 'Every door from imported reports. Expand a row to see its readers.'}
+          </p>
+        </div>
+        <UserGuide variant="header" />
       </div>
 
       <Card>

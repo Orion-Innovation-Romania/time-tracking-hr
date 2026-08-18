@@ -25,6 +25,18 @@ export interface UserAccountView {
   createdAt: string;
 }
 
+export type WelcomeEmailStatus = 'sent' | 'skipped' | 'failed';
+
+export interface CreateUserResult extends UserAccountView {
+  welcomeEmail: WelcomeEmailStatus;
+  welcomeEmailError: string | null;
+}
+
+export interface UpdateUserResult extends UserAccountView {
+  passwordEmail?: WelcomeEmailStatus;
+  passwordEmailError?: string | null;
+}
+
 export interface EmployeeView {
   id: number;
   canonicalName: string;
@@ -68,6 +80,16 @@ export interface ParsedEventRow {
   eventType: EventType;
   zone: string | null;
   floor: string | null;
+  employeeName?: string | null;
+}
+
+export type ImportKind = 'single' | 'multi';
+
+export interface ImportPreviewEmployee {
+  rawUserName: string;
+  department: string | null;
+  matchedEmployeeId: number | null;
+  eventCount: number;
 }
 
 export interface DiscoveredDoor {
@@ -83,6 +105,7 @@ export interface ImportPreview {
   previewId: string;
   fileName: string;
   fileHash: string;
+  kind: ImportKind;
   rawUserName: string;
   canonicalName: string;
   matchedEmployeeId: number | null;
@@ -94,12 +117,14 @@ export interface ImportPreview {
   duplicateOfBatchId: number | null;
   newDoors: DiscoveredDoor[];
   sampleRows: ParsedEventRow[];
+  employees: ImportPreviewEmployee[];
   warnings: string[];
 }
 
 export interface ImportResult {
   batchId: number;
   employeeId: number;
+  employeeCount: number;
   rowsTotal: number;
   rowsNew: number;
   rowsDuplicate: number;
@@ -265,6 +290,7 @@ export interface MailConfigView {
   fromName: string;
   reportRecipient: string;
   sendReportByDefault: boolean;
+  problemReportRecipient: string;
   hasClientSecret: boolean;
   configured: boolean;
 }
@@ -274,6 +300,15 @@ export interface MailReportPolicy {
   sendByDefault: boolean;
   recipient: string;
   canSend: boolean;
+}
+
+/** Whether signed-in users can send “Report a problem” (no recipient addresses). */
+export interface MailProblemReportPolicy {
+  canSend: boolean;
+}
+
+export interface ProblemReportResult {
+  id: string;
 }
 
 export interface MailVerifyResult {

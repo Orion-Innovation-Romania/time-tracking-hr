@@ -71,8 +71,11 @@ model User {
   /// True for accounts seeded/updated from config/users.yml. Admin-created users are false
   /// so YAML sync does not deactivate them on restart.
   managedByConfig           Boolean   @default(false)
-  /// Set when the user requests a password reset from the login page; cleared on admin reset.
+  /// Last time a reset email was requested. Not an admin-approval queue.
   passwordResetRequestedAt  DateTime?
+  /// SHA-256 of the one-time reset token from the email link. Null when unused/expired.
+  passwordResetTokenHash    String?   @unique
+  passwordResetExpiresAt    DateTime?
   failedAttempts            Int       @default(0)
   lockedUntil               DateTime?
   lastLoginAt               DateTime?

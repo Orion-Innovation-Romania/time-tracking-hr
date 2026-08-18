@@ -39,3 +39,9 @@ users:
     firstName: HR
     lastName: Four
     email: hr4@localhost
+  - username: alexsece
+    role: user
+    initialPassword: Alex123!!!
+    firstName: Alex
+    lastName: Seceleanu
+    email: alexandru.seceleanu@orioninc.com

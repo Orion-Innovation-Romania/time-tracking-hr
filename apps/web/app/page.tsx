@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { OrionMark, OrionLogo, OI_TAGLINE } from '@/components/brand';
 import { useLogout, useSession } from '@/lib/session';
 import { ServiceUnavailable } from '@/components/service-unavailable';
+import { UserGuide } from '@/components/user-guide';
 
 interface AppCard {
   href: string;
@@ -74,6 +75,7 @@ export default function PortalPage() {
             <span className="text-lg font-bold tracking-tight">TTAH Portal</span>
           </div>
           <div className="flex items-center gap-3">
+            <UserGuide variant="header" />
             {session.role === 'admin' && (
               <span className="hidden items-center gap-1 text-xs font-medium text-muted-foreground sm:flex">
                 <ShieldCheck className="h-4 w-4" />

@@ -4,6 +4,9 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": false,
-    "webpack": false
+    "webpack": false,
+    "assets": ["mail/assets/**/*"],
+    "watchAssets": false,
+    "tsConfigPath": "tsconfig.build.json"
   }
 }

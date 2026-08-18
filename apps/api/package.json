@@ -4,12 +4,12 @@
   "private": true,
   "description": "TTAH backend API (NestJS)",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "predev": "node -e \"const fs=require('fs');const cp=require('child_process');if(!fs.existsSync('dist/main.js')){try{fs.unlinkSync('tsconfig.build.tsbuildinfo')}catch{};cp.execSync('tsc -p tsconfig.build.json',{stdio:'inherit'})}\"",
-    "dev": "nest start --watch",
-    "start": "node dist/main.js",
-    "start:dev": "nest start --watch",
-    "start:prod": "node dist/main.js",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-mail-assets.cjs",
+    "predev": "node -e \"const fs=require('fs');const cp=require('child_process');const path=require('path');function run(c){cp.execSync(c,{stdio:'inherit'})}try{run('npx prisma generate')}catch(e){if(!fs.existsSync(path.resolve('..','..','node_modules','.prisma','client','index.js')))throw e;console.warn('[api] prisma generate skipped (engine locked); using existing client')}run('npx prisma migrate deploy');if(!fs.existsSync('dist/main.js')){try{fs.unlinkSync('tsconfig.build.tsbuildinfo')}catch{};run('npx tsc -p tsconfig.build.json');run('node scripts/copy-mail-assets.cjs')}\"",
+    "dev": "tsc-watch -p tsconfig.build.json --noClear --onSuccess \"node scripts/run-dev.cjs\"",
+    "start": "prisma migrate deploy && node dist/main.js",
+    "start:dev": "tsc-watch -p tsconfig.build.json --noClear --onSuccess \"node scripts/run-dev.cjs\"",
+    "start:prod": "prisma migrate deploy && node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "jest",
@@ -60,6 +60,7 @@
     "source-map-support": "^0.5.21",
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
+    "tsc-watch": "^7.2.1",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.6.3"
   }

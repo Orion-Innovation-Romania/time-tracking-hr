@@ -66,6 +66,31 @@ export const CONDITION_LABELS: Record<ConditionType, string> = {
   MAX_DAILY_MINUTES: 'Cap daily total (min)',
 };
 
+/** One-line hint shown in the “Add condition” menu. */
+export const CONDITION_HINTS: Record<ConditionType, string> = {
+  MIN_SESSION_MINUTES: 'Hide very short inside sessions (accidental double-reads).',
+  GRACE_START_MINUTES: 'A few minutes late still counts as arriving on time.',
+  GRACE_END_MINUTES: 'A few minutes early still counts as leaving on time.',
+  ROUND_DAILY_MINUTES: 'Override the daily rounding step above.',
+  IGNORE_ZONE: 'Exclude named door zones from worked time.',
+  MAX_DAILY_MINUTES: 'Hard cap on worked minutes for the day.',
+};
+
+export const CONDITION_DESCRIPTIONS: Record<ConditionType, string> = {
+  MIN_SESSION_MINUTES:
+    'Drop inside sessions shorter than N minutes (a badge in and out at the same door). Example: 2 minutes hides an accidental double-read; a 20-minute visit still counts.',
+  GRACE_START_MINUTES:
+    'If they badge in up to N minutes after the scheduled start, treat the day as starting on time. Example: start 09:00 and grace 10 → a 09:08 arrival counts from 09:00.',
+  GRACE_END_MINUTES:
+    'If they badge out up to N minutes before the scheduled end, treat the day as ending on time. Example: end 17:30 and grace 10 → a 17:22 exit counts through 17:30.',
+  ROUND_DAILY_MINUTES:
+    'Overrides “Round daily total” above with this step, only while the condition is enabled. Same nearest-multiple rounding.',
+  IGNORE_ZONE:
+    'Do not count presence in these door zones. Type names as imported, comma-separated. Events still appear in raw data; they just add no worked time.',
+  MAX_DAILY_MINUTES:
+    'Never report more than N worked minutes in a day, after lunch and rounding. Example: 480 caps the day at 8 hours.',
+};
+
 export const KIND_LABELS: Record<ExportKind, string> = {
   summary: 'Summary',
   pontaj: 'Pontaj',

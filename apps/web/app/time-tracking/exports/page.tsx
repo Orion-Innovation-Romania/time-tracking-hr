@@ -20,6 +20,7 @@ import { METRIC_LABELS, KIND_LABELS } from '@/lib/labels';
 import { useEmployees } from '@/lib/hooks';
 import { DateRangePicker, isIsoDate, type DateRange } from '@/components/date-range-picker';
 import { EmployeePicker } from '@/components/employee-picker';
+import { UserGuide } from '@/components/user-guide';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -361,11 +362,14 @@ export default function ExportsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-          <FileSpreadsheet className="h-7 w-7" /> Exports
-        </h1>
-        <p className="text-muted-foreground">Generate timesheets and configure export templates.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+            <FileSpreadsheet className="h-7 w-7" /> Exports
+          </h1>
+          <p className="text-muted-foreground">Generate timesheets and configure export templates.</p>
+        </div>
+        <UserGuide variant="header" />
       </div>
 
       <Card>

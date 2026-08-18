@@ -26,5 +26,5 @@ WORKDIR /app
 COPY --from=build /app ./
 EXPOSE 4000
 ENTRYPOINT ["/sbin/tini", "--"]
-# Apply migrations then start. prisma is a prod dependency so this works at runtime.
-CMD ["sh", "-c", "pnpm --filter @ttah/api prisma:deploy && node apps/api/dist/main.js"]
+# Apply pending migrations, then start. `start:prod` is the same command used outside Docker.
+CMD ["pnpm", "--filter", "@ttah/api", "start:prod"]

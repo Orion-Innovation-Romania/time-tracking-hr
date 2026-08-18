@@ -73,7 +73,12 @@ async function parseError(res: Response): Promise<ApiFailure> {
 }
 
 /** Login/forgot/refresh 401s are expected (bad password, no cookie). Everything else means the session is dead. */
-const PUBLIC_AUTH_PATHS = new Set(['/auth/login', '/auth/forgot-password', '/auth/refresh']);
+const PUBLIC_AUTH_PATHS = new Set([
+  '/auth/login',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/refresh',
+]);
 
 function authPath(path: string): string {
   return path.split('?')[0];
@@ -170,7 +175,7 @@ export async function api<T = unknown>(
   return (await res.text()) as unknown as T;
 }
 
-/** Upload multipart form data (used by PDF import preview). */
+/** Upload multipart form data (used by import preview). */
 export async function apiUpload<T = unknown>(
   path: string,
   form: FormData,

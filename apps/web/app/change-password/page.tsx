@@ -7,8 +7,9 @@ import { Loader2 } from 'lucide-react';
 import type { SessionUser } from '@ttah/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { OrionMark, OI_TAGLINE } from '@/components/brand';
+import { UserGuide } from '@/components/user-guide';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/toast';
@@ -56,6 +57,7 @@ export default function ChangePasswordPage() {
           <CardHeader className="items-center text-center">
             <OrionMark variant="gradient" className="mb-3 w-16" />
             <CardTitle className="text-2xl">Set a new password</CardTitle>
+            <UserGuide variant="compact" className="mt-1" />
           </CardHeader>
         <CardContent>
           <form

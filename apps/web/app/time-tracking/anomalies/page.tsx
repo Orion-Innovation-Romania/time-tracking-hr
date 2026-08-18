@@ -11,6 +11,7 @@ import { DateRangePicker, isIsoDate, type DateRange } from '@/components/date-ra
 import { DayInsightDialog, FlagBadgeButton } from '@/components/day-insight-dialog';
 import { EmployeeSearchSelect } from '@/components/employee-search-select';
 import { useEmployees } from '@/lib/hooks';
+import { UserGuide } from '@/components/user-guide';
 import { useToast } from '@/components/ui/toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -228,7 +229,7 @@ export default function AnomaliesPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
             <TriangleAlert className="h-7 w-7" /> Anomalies
@@ -237,7 +238,10 @@ export default function AnomaliesPage() {
             Days needing review — click a flag to see the badge timeline and why it was raised.
           </p>
         </div>
-        <DateRangePicker value={range} onChange={setRange} />
+        <div className="flex flex-wrap items-start gap-3">
+          <UserGuide variant="header" />
+          <DateRangePicker value={range} onChange={setRange} />
+        </div>
       </div>
 
       <EmployeeSearchSelect

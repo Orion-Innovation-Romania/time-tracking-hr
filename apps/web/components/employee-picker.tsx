@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Search, X } from 'lucide-react';
+import { ChevronDown, Search, X } from 'lucide-react';
 import type { EmployeeView } from '@ttah/shared';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ export function EmployeePicker({
   const [query, setQuery] = useState('');
   const [department, setDepartment] = useState('all');
   const [activeOnly, setActiveOnly] = useState(true);
+  const [listOpen, setListOpen] = useState(false);
 
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
   const departments = useMemo(() => {
@@ -155,7 +156,12 @@ export function EmployeePicker({
       </div>
 
       <div className="overflow-hidden rounded-lg border">
-        <div className="flex items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <div
+          className={cn(
+            'flex items-center gap-3 bg-muted/40 px-3 py-2 text-xs text-muted-foreground',
+            listOpen && 'border-b',
+          )}
+        >
           <input
             type="checkbox"
             className="h-4 w-4 accent-primary"
@@ -166,46 +172,58 @@ export function EmployeePicker({
             onChange={() => (allVisibleSelected ? clearVisible() : selectVisible())}
             aria-label="Select all visible"
           />
-          <span className="flex-1">
-            {filtered.length} shown
-            {query || department !== 'all' ? ' (filtered)' : ''}
-          </span>
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            aria-expanded={listOpen}
+            onClick={() => setListOpen((open) => !open)}
+          >
+            <span className="flex-1">
+              {filtered.length} shown
+              {query || department !== 'all' ? ' (filtered)' : ''}
+            </span>
+            <ChevronDown
+              className={cn('h-4 w-4 shrink-0 transition-transform', listOpen && 'rotate-180')}
+            />
+          </button>
         </div>
-        <ul className="thin-scrollbar max-h-72 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <li className="px-3 py-8 text-center text-sm text-muted-foreground">No matching employees.</li>
-          ) : (
-            filtered.map((e) => {
-              const on = selected.has(e.id);
-              return (
-                <li key={e.id}>
-                  <label
-                    className={cn(
-                      'flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-accent/60',
-                      on && 'bg-primary/5',
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-primary"
-                      checked={on}
-                      onChange={() => toggle(e.id)}
-                    />
-                    <span className="min-w-0 flex-1 truncate font-medium">{e.displayName}</span>
-                    <span className="hidden truncate text-xs text-muted-foreground sm:block">
-                      {e.departments.join(', ') || '—'}
-                    </span>
-                    {!e.active && (
-                      <Badge variant="outline" className="shrink-0 text-[10px]">
-                        inactive
-                      </Badge>
-                    )}
-                  </label>
-                </li>
-              );
-            })
-          )}
-        </ul>
+        {listOpen ? (
+          <ul className="thin-scrollbar max-h-72 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-8 text-center text-sm text-muted-foreground">No matching employees.</li>
+            ) : (
+              filtered.map((e) => {
+                const on = selected.has(e.id);
+                return (
+                  <li key={e.id}>
+                    <label
+                      className={cn(
+                        'flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-accent/60',
+                        on && 'bg-primary/5',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={on}
+                        onChange={() => toggle(e.id)}
+                      />
+                      <span className="min-w-0 flex-1 truncate font-medium">{e.displayName}</span>
+                      <span className="hidden truncate text-xs text-muted-foreground sm:block">
+                        {e.departments.join(', ') || '—'}
+                      </span>
+                      {!e.active && (
+                        <Badge variant="outline" className="shrink-0 text-[10px]">
+                          inactive
+                        </Badge>
+                      )}
+                    </label>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        ) : null}
       </div>
     </div>
   );
