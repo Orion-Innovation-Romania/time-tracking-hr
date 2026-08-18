@@ -157,6 +157,23 @@ export class UsersService {
     return this.toView(row);
   }
 
+  async resetToInitial(userId: number) {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: user.initialPasswordHash,
+        mustChangePassword: true,
+        failedAttempts: 0,
+        lockedUntil: null,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        passwordResetRequestedAt: null,
+      },
+    });
+  }
+
   async setPassword(userId: number, newPassword: string, mustChange = false) {
     const passwordHash = await this.hash(newPassword);
     return this.prisma.user.update({

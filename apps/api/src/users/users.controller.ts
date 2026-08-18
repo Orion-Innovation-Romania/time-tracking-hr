@@ -128,6 +128,21 @@ export class UsersController {
     };
   }
 
+  @Post(':id/reset-password')
+  async resetPassword(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() actor: SessionUser,
+  ) {
+    await this.users.resetToInitial(id);
+    await this.audit.log({
+      userId: actor.id,
+      action: 'reset-password',
+      entity: 'User',
+      entityId: id,
+    });
+    return { ok: true };
+  }
+
   @Delete(':id')
   async remove(
     @Param('id', ParseIntPipe) id: number,

@@ -136,6 +136,25 @@ export default function UsersAdminPage() {
     },
   });
 
+  const resetPassword = useMutation({
+    mutationFn: (id: number) =>
+      api<{ ok: true }>(`/users/${id}/reset-password`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast({
+        title: 'Password reset',
+        description: 'User must sign in with the initial password and set a new one.',
+      });
+    },
+    onError: (err) => {
+      toast({
+        title: 'Reset failed',
+        description: err instanceof ApiRequestError ? err.message : 'Unknown error',
+        variant: 'error',
+      });
+    },
+  });
+
   const saveProfile = useMutation({
     mutationFn: () =>
       api<UserAccountView>(`/users/${editing!.id}`, {
@@ -223,6 +242,7 @@ export default function UsersAdminPage() {
   }
 
   const rows = users.data ?? [];
+  const pending = rows.filter((u) => u.passwordResetRequestedAt);
 
   return (
     <div className="space-y-6">
