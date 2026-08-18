@@ -56,9 +56,6 @@ export default function ChangePasswordPage() {
           <CardHeader className="items-center text-center">
             <OrionMark variant="gradient" className="mb-3 w-16" />
             <CardTitle className="text-2xl">Set a new password</CardTitle>
-            <CardDescription>
-              Minimum 10 characters, with at least one letter and one digit; spaces are not allowed.
-            </CardDescription>
           </CardHeader>
         <CardContent>
           <form
