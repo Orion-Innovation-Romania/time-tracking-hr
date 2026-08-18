@@ -17,6 +17,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogClose,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -205,6 +206,8 @@ export default function EmployeesPage() {
   const employees = useEmployees();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<EmployeeView | null>(null);
+  const [confirmEmployee, setConfirmEmployee] = useState<EmployeeView | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const remove = useMutation({
     mutationFn: (id: number) => api(`/employees/${id}`, { method: 'DELETE' }),
@@ -307,13 +310,8 @@ export default function EmployeesPage() {
                           size="icon"
                           disabled={remove.isPending}
                           onClick={() => {
-                            if (
-                              confirm(
-                                `Delete ${e.displayName}? This removes their badge events, hours and leaves. A later import with the same name will recreate them.`,
-                              )
-                            ) {
-                              remove.mutate(e.id);
-                            }
+                            setConfirmEmployee(e);
+                            setConfirmOpen(true);
                           }}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
@@ -329,6 +327,33 @@ export default function EmployeesPage() {
       </Card>
 
       {editing && <EmployeeDialog employee={editing} onClose={() => setEditing(null)} />}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete employee</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {confirmEmployee?.displayName}? This removes their badge events, hours and leaves. A later import with the same name will recreate them.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmEmployee) remove.mutate(confirmEmployee.id);
+                setConfirmOpen(false);
+              }}
+              disabled={remove.isPending}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
