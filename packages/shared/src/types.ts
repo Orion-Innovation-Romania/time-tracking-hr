@@ -323,3 +323,75 @@ export interface MailSendResult {
 export interface ExportAvailability {
   hasData: boolean;
 }
+
+export type ResourceHealth = 'ok' | 'watch' | 'critical';
+
+export interface SystemHostInfo {
+  hostname: string;
+  platform: string;
+  release: string;
+  arch: string;
+  cpuCount: number;
+  cpuModel: string;
+  nodeVersion: string;
+  inContainer: boolean;
+  memSource: 'os' | 'cgroup';
+}
+
+export interface SystemSnapshot {
+  at: string;
+  cpuPercent: number;
+  memUsedBytes: number;
+  memTotalBytes: number;
+  diskUsedBytes: number | null;
+  diskTotalBytes: number | null;
+  diskPath: string | null;
+  load1: number;
+  load5: number;
+  load15: number;
+  processRssBytes: number;
+  processHeapBytes: number;
+  processCpuPercent: number | null;
+  osUptimeSec: number;
+  processUptimeSec: number;
+}
+
+export interface SystemVerdict {
+  cpu: ResourceHealth;
+  memory: ResourceHealth;
+  disk: ResourceHealth;
+  overall: ResourceHealth;
+  notes: string[];
+}
+
+export interface SystemNowResponse {
+  host: SystemHostInfo;
+  current: SystemSnapshot;
+  verdict: SystemVerdict;
+}
+
+export interface SystemHistoryPoint {
+  at: string;
+  cpuPercent: number;
+  memUsedPct: number;
+  diskUsedPct: number | null;
+  memUsedBytes: number;
+  memTotalBytes: number;
+}
+
+export interface SystemHistorySummary {
+  cpuAvg: number;
+  cpuMax: number;
+  memAvgPct: number;
+  memMaxPct: number;
+  diskAvgPct: number | null;
+  diskMaxPct: number | null;
+  samples: number;
+}
+
+export interface SystemHistoryResponse {
+  rangeHours: number;
+  bucketMinutes: number;
+  points: SystemHistoryPoint[];
+  summary: SystemHistorySummary;
+}

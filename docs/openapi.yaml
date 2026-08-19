@@ -96,6 +96,8 @@ tags:
     description: Microsoft Graph, rapoarte, problem-report
   - name: Audit
     description: Jurnal de acțiuni
+  - name: System
+    description: Resurse gazdă (doar admin)
 security:
   - cookieAuth: []
   - bearerAuth: []
@@ -1594,6 +1596,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuditList'
 
+  /api/system/now:
+    get:
+      tags: [System]
+      operationId: getSystemNow
+      summary: Snapshot live CPU/RAM/disk
+      description: "**admin**. Include verdict OK/Watch/Critical."
+      x-roles: [admin]
+      responses:
+        '200':
+          description: Metrici curente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemNowResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/system/history:
+    get:
+      tags: [System]
+      operationId: getSystemHistory
+      summary: Istoric utilizare (eșantioane la 1 minut, 90 zile)
+      description: "**admin**. Query `hours` 1–2160 (implicit 24)."
+      x-roles: [admin]
+      parameters:
+        - name: hours
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2160
+            default: 24
+      responses:
+        '200':
+          description: Serie downsample-uită
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemHistoryResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
 components:
   securitySchemes:
     cookieAuth:
@@ -2937,3 +2983,42 @@ components:
             $ref: '#/components/schemas/AuditLogView'
         total:
           type: integer
+    ResourceHealth:
+      type: string
+      enum: [ok, watch, critical]
+    SystemNowResponse:
+      type: object
+      properties:
+        host:
+          type: object
+        current:
+          type: object
+        verdict:
+          type: object
+          properties:
+            cpu:
+              $ref: '#/components/schemas/ResourceHealth'
+            memory:
+              $ref: '#/components/schemas/ResourceHealth'
+            disk:
+              $ref: '#/components/schemas/ResourceHealth'
+            overall:
+              $ref: '#/components/schemas/ResourceHealth'
+            notes:
+              type: array
+              items:
+                type: string
+    SystemHistoryResponse:
+      type: object
+      properties:
+        rangeHours:
+          type: integer
+        bucketMinutes:
+          type: integer
+        points:
+          type: array
+          items:
+            type: object
+        summary:
+          type: object
+

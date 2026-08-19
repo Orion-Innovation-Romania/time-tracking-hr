@@ -314,3 +314,18 @@ model AuditLog {
   @@index([entity, entityId])
   @@index([at])
 }
+
+/// Periodic host snapshots for the admin System Resources dashboard.
+model SystemMetricSample {
+  id              Int      @id @default(autoincrement())
+  at              DateTime @default(now())
+  cpuPercent      Float
+  memUsedBytes    BigInt
+  memTotalBytes   BigInt
+  diskUsedBytes   BigInt?
+  diskTotalBytes  BigInt?
+  load1           Float    @default(0)
+  processRssBytes BigInt
+
+  @@index([at])
+}

@@ -65,13 +65,18 @@ const GUIDES: Record<string, UserGuideContent> = {
     title: 'Portal home',
     tagline: 'Pick an app and get to work',
     summary:
-      'This is the TTAH landing page. From here you open Time Tracking or sign out. More internal apps will appear here later.',
+      'This is the TTAH landing page. From here you open Time Tracking or sign out. Administrators also see System Resources.',
     icon: 'home',
     canDo: [
       {
         icon: 'clock',
         title: 'Open Time Tracking',
         description: 'Analyze badge logs, review presence, and build timesheets.',
+      },
+      {
+        icon: 'chart',
+        title: 'System Resources (admin)',
+        description: 'Live CPU, memory and disk plus 90 days of history for this machine.',
       },
       {
         icon: 'lock',
@@ -88,14 +93,66 @@ const GUIDES: Record<string, UserGuideContent> = {
             description: 'Opens the dashboard. The other card is a placeholder for future apps.',
           },
           {
+            title: 'Admins: open System Resources',
+            description: 'Check whether this host has enough CPU, RAM and disk. History is stored every minute.',
+          },
+          {
             title: 'Use the left menu',
             description:
-              'Once inside, every page has its own User Guide — open it whenever you need a quick reminder.',
+              'Once inside Time Tracking, every page has its own User Guide — open it whenever you need a quick reminder.',
           },
         ],
       },
     ],
-    tips: ['Your username is shown in the header. Admins also see a shield icon.'],
+    tips: [
+      'Your username is shown in the header. Admins also see a shield icon.',
+      'System Resources is visible only to admin accounts.',
+    ],
+  },
+
+  '/system': {
+    title: 'System Resources',
+    tagline: 'Is this machine enough?',
+    summary:
+      'Live CPU, memory and disk for the host running the TTAH API, plus history sampled every minute and kept for 90 days. Admin only.',
+    icon: 'chart',
+    canDo: [
+      {
+        icon: 'chart',
+        title: 'Read live utilization',
+        description: 'CPU, RAM and disk update every few seconds. OK / Watch / Critical use 75% and 90% thresholds.',
+      },
+      {
+        icon: 'calendar',
+        title: 'Review history',
+        description: 'Switch 1h–30d to see whether a spike was brief or the machine is chronically tight.',
+      },
+      {
+        icon: 'settings',
+        title: 'Check the host',
+        description: 'Hostname, OS, container vs VM, API process RSS, and uptime.',
+      },
+    ],
+    howTo: [
+      {
+        title: 'Judge capacity',
+        steps: [
+          {
+            title: 'Look at the three gauges',
+            description: 'If any stay in Watch or Critical after a quiet period, the host is undersized.',
+          },
+          {
+            title: 'Open 7d or 30d',
+            description: 'Peaks during imports/exports are normal. A high baseline all day is not.',
+          },
+        ],
+      },
+    ],
+    tips: [
+      'In Docker the numbers are what the API container sees (cgroup limits when set).',
+      'The first history points appear about a minute after the API starts.',
+    ],
+    related: [{ href: '/', label: 'Portal home' }],
   },
 
   '/login': {

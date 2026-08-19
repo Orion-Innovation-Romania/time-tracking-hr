@@ -10,6 +10,7 @@ import { OrionMark, OrionLogo, OI_TAGLINE } from '@/components/brand';
 import { useLogout, useSession } from '@/lib/session';
 import { ServiceUnavailable } from '@/components/service-unavailable';
 import { UserGuide } from '@/components/user-guide';
+import { SystemResourcesCard } from '@/components/system-resources-card';
 
 interface AppCard {
   href: string;
@@ -130,6 +131,7 @@ export default function PortalPage() {
               </CardContent>
             </Card>
           ))}
+          {session.role === 'admin' && <SystemResourcesCard />}
         </div>
       </main>
 

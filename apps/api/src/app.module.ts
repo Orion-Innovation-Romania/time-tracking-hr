@@ -14,6 +14,7 @@ import { ImportsModule } from './imports/imports.module';
 import { ExportsModule } from './exports/exports.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
+import { SystemModule } from './system/system.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PasswordPolicyGuard } from './common/guards/password-policy.guard';
@@ -33,6 +34,7 @@ import { PasswordPolicyGuard } from './common/guards/password-policy.guard';
     ExportsModule,
     HealthModule,
     MailModule,
+    SystemModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
