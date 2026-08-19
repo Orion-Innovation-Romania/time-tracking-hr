@@ -1,0 +1,2939 @@
+openapi: 3.0.3
+info:
+  title: TTAH API
+  version: 0.1.0
+  description: |
+    API NestJS pentru TTAH (HR time tracking). Prefix global: `/api`.
+
+    ## Autentificare
+
+    Sesiunea este pe **cookie-uri HttpOnly** (nu există token în body-ul de login):
+
+    | Cookie          | Rol                         | TTL implicit |
+    |-----------------|-----------------------------|--------------|
+    | `access_token`  | JWT de acces (obligatoriu)  | 900 s (15 min) |
+    | `refresh_token` | Rotire sesiune              | 604800 s (7 zile) |
+
+    Cookie-urile: `HttpOnly`, `SameSite=Lax`, `Path=/`. `Secure` e activ doar când `COOKIE_SECURE=true`.
+
+    **Pentru QA (Postman / Bruno / Newman / Playwright):**
+
+    1. `POST /api/auth/login` cu JSON `{ "username", "password" }`.
+    2. Clientul trebuie să **păstreze cookie-urile** (Postman: cookie jar; Newman: `--cookie-jar`; Playwright: `storageState` / context cookies).
+    3. Request-urile următoare trimit automat `access_token`.
+    4. La 401, apelează `POST /api/auth/refresh` (folosește `refresh_token`) apoi reîncearcă.
+
+    **Bearer (opțional, pentru scripturi):** poți copia valoarea `access_token` din `Set-Cookie`
+    și o trimiți ca `Authorization: Bearer <jwt>`. Cookie-ul rămâne metoda folosită de UI.
+
+    **Swagger UI** (`/api/docs`): rulează pe același origin cu API-ul. După *Try it out* pe login,
+    cookie-urile sunt setate în browser; restul request-urilor le trimit automat
+    (`withCredentials`). Pentru Bearer, deschide **Authorize** și lipește JWT-ul.
+
+    ## Roluri
+
+    | Rol     | Acces |
+    |---------|--------|
+    | `user`  | Toate rutele autentificate, exceptând cele marcate **admin** |
+    | `admin` | Tot ce poate `user`, plus utilizatori, mail Graph, birouri/uși (scris) |
+
+    Rutele **admin** răspund `403 Insufficient permissions` pentru `user`.
+
+    ## Politică parolă
+
+    Dacă `mustChangePassword: true`, aproape toate rutele autentificate răspund
+    `403` cu mesajul `PASSWORD_CHANGE_REQUIRED`. Permise în această stare:
+    `GET /auth/me`, `POST /auth/change-password`, `POST /auth/logout`,
+    `GET /mail/problem-report-policy`, `POST /mail/problem-report`.
+
+    ## Erori
+
+    NestJS JSON: `{ "statusCode": number, "message": string | string[], "error"?: string }`.
+    Validare Zod: `400` cu `"error": "ValidationError"` și `message` ca listă de path-uri.
+
+    Rate limits: `429 Too Many Requests` pe forgot/reset password și pe problem-report.
+
+    ## Status HTTP (NestJS)
+
+    `POST` răspunde **201 Created** (inclusiv login), nu 200.
+    Excepție: `POST /api/exports/generate` → **200** (trimite fișierul cu `res.send`).
+    `GET` / `PUT` / `PATCH` / `DELETE` → **200**.
+    `DELETE /api/attendance/day` → 200 sau 404.
+  contact:
+    name: TTAH
+servers:
+  - url: http://localhost:4000
+    description: API direct (dev) — folosește acest server din Swagger UI
+  - url: http://localhost:3000
+    description: Prin rewrite Next.js (aceleași cookie-uri ca UI-ul)
+  - url: '{origin}'
+    description: Alt mediu (Caddy / staging / prod)
+    variables:
+      origin:
+        default: https://localhost
+tags:
+  - name: Health
+    description: Liveness / DB ping (public)
+  - name: Auth
+    description: Login, sesiune, reset parolă
+  - name: Users
+    description: "Conturi portal — doar admin"
+  - name: Employees
+    description: Angajați și program individual
+  - name: Offices
+    description: Birouri / zone
+  - name: Doors
+    description: Uși și cititoare
+  - name: Attendance
+    description: Pontaj, dashboard, corecții
+  - name: Imports
+    description: Import rapoarte acces (CSV/PDF)
+  - name: Exports
+    description: Template-uri și generare XLSX/CSV
+  - name: Config
+    description: Program, prânz, praguri, sărbători, concedii
+  - name: Mail
+    description: Microsoft Graph, rapoarte, problem-report
+  - name: Audit
+    description: Jurnal de acțiuni
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: API pornit (db poate fi `up` sau `down`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Login — setează cookie-urile de sesiune
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+            example:
+              username: admin
+              password: 'ChangeMe123'
+      responses:
+        '201':
+          description: Sesiune creată. Header `Set-Cookie` pentru `access_token` și `refresh_token`.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Două cookie-uri HttpOnly (`access_token`, `refresh_token`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionUser'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Credențiale invalide sau cont blocat temporar (`Account temporarily locked`)
+
+  /api/auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Cere email de resetare parolă
+      description: |
+        Răspunde `{ ok: true }` și dacă emailul nu există (anti-enumeration).
+        Limită: 5 cereri / 15 min per IP, 3 / 15 min per email.
+        Cere mail configurat și `PUBLIC_APP_URL`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordInput'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+          description: Cerere acceptată
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Mail sau URL public neconfigurat
+
+  /api/auth/reset-password:
+    get:
+      tags: [Auth]
+      operationId: peekResetPassword
+      summary: Verifică dacă token-ul de reset e valid
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-fA-F0-9]{64}$'
+      responses:
+        '200':
+          description: Token valid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '400':
+          description: Link invalid sau expirat
+    post:
+      tags: [Auth]
+      operationId: completeResetPassword
+      summary: Setează parola nouă cu token-ul din email
+      description: Limită 10 încercări / 15 min per IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordInput'
+      responses:
+        '201':
+          description: Parola schimbată
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      summary: Rotire sesiune din cookie-ul refresh_token
+      security: []
+      responses:
+        '201':
+          description: Cookie-uri reemise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionUser'
+        '401':
+          description: Lipsă sau refresh token invalid
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Șterge cookie-urile de sesiune
+      description: Permis și când `mustChangePassword` e true.
+      responses:
+        '201':
+          description: Cookie-uri șterse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      operationId: getMe
+      summary: Utilizatorul sesiunii curente
+      description: Permis și când `mustChangePassword` e true.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionUser'
+          description: Sesiune validă
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/change-password:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Schimbă parola (reemite cookie-urile)
+      description: Permis și când `mustChangePassword` e true. După succes, flag-ul dispare.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordInput'
+      responses:
+        '201':
+          description: Parolă schimbată, sesiune reemisă
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionUser'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: Listează conturile portal
+      description: "**admin**"
+      x-roles: [admin]
+      responses:
+        '200':
+          description: Lista de conturi
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserAccountView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Creează un cont
+      description: |
+        **admin**. Email trebuie `@orioninc.com`. Parola inițială e trimisă pe mail dacă Graph e configurat.
+        Username: 2–64, `[a-zA-Z0-9._-]`.
+      x-roles: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserInput'
+      responses:
+        '201':
+          description: Cont creat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUserResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Username sau email deja folosit
+
+  /api/users/login-history:
+    get:
+      tags: [Users]
+      operationId: listLoginHistory
+      summary: Istoric autentificări
+      description: "**admin**. Implicit 100, maxim 500."
+      x-roles: [admin]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        '200':
+          description: Cele mai recente încercări de login
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LoginHistory'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/users/{id}:
+    patch:
+      tags: [Users]
+      operationId: updateUser
+      summary: Actualizează un cont
+      description: "**admin**. Dacă trimiți `initialPassword`, se încearcă un email cu parola."
+      x-roles: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserInput'
+      responses:
+        '200':
+          description: Cont actualizat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateUserResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Email deja folosit
+    delete:
+      tags: [Users]
+      operationId: deleteUser
+      summary: Dezactivează un cont
+      description: "**admin**. Nu poți șterge ultimul admin activ. Nu poți șterge contul curent dacă e ultimul admin."
+      x-roles: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Cont dezactivat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '400':
+          description: Ultimul admin
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/employees:
+    get:
+      tags: [Employees]
+      operationId: listEmployees
+      summary: Listează angajații
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: includeInactive
+          in: query
+          schema:
+            type: string
+            enum: ['true', 'false']
+          description: Trimite `true` ca să incluzi inactivi (implicit doar activi)
+      responses:
+        '200':
+          description: Lista de angajați
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmployeeView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/employees/departments:
+    get:
+      tags: [Employees]
+      operationId: listDepartments
+      summary: Departamente distincte
+      responses:
+        '200':
+          description: Nume de departamente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/employees/{id}:
+    get:
+      tags: [Employees]
+      operationId: getEmployee
+      summary: Un angajat
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Angajat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeView'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Employees]
+      operationId: updateEmployee
+      summary: Actualizează display name / activ / note
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEmployeeInput'
+      responses:
+        '200':
+          description: Angajat actualizat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeView'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Employees]
+      operationId: deleteEmployee
+      summary: Șterge un angajat
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Șters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/employees/{id}/schedule:
+    get:
+      tags: [Employees]
+      operationId: getEmployeeSchedule
+      summary: Override de program (sau null)
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Override sau `null` dacă folosește programul global
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/EmployeeSchedule'
+                  - nullable: true
+    put:
+      tags: [Employees]
+      operationId: setEmployeeSchedule
+      summary: Setează override de program
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeScheduleInput'
+      responses:
+        '200':
+          description: Override salvat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeSchedule'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/offices:
+    get:
+      tags: [Offices]
+      operationId: listOffices
+      summary: Listează birourile
+      responses:
+        '200':
+          description: Birouri
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfficeView'
+    post:
+      tags: [Offices]
+      operationId: createOffice
+      summary: Creează un birou
+      description: "**admin**"
+      x-roles: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfficeCreateInput'
+      responses:
+        '201':
+          description: Birou creat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficeView'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/offices/{id}:
+    patch:
+      tags: [Offices]
+      operationId: updateOffice
+      summary: Redenumește un birou
+      description: "**admin**"
+      x-roles: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfficeCreateInput'
+      responses:
+        '200':
+          description: Birou actualizat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfficeView'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Offices]
+      operationId: deleteOffice
+      summary: Șterge un birou
+      description: "**admin**"
+      x-roles: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Șters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/doors:
+    get:
+      tags: [Doors]
+      operationId: listDoors
+      summary: Listează ușile cu cititoare
+      responses:
+        '200':
+          description: Uși
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DoorView'
+
+  /api/doors/{id}:
+    patch:
+      tags: [Doors]
+      operationId: updateDoor
+      summary: Actualizează o ușă
+      description: "**admin**"
+      x-roles: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoorUpdateInput'
+      responses:
+        '200':
+          description: Ușă actualizată (model Prisma Door)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoorRecord'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/doors/{doorId}/readers/{readerId}:
+    patch:
+      tags: [Doors]
+      operationId: updateReader
+      summary: Setează rolul cititorului (IN/OUT/NEUTRAL)
+      description: "**admin**. Path-ul `doorId` e ignorat; identificatorul e `readerId`."
+      x-roles: [admin]
+      parameters:
+        - name: doorId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: readerId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReaderUpdateInput'
+      responses:
+        '200':
+          description: Cititor actualizat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderRecord'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/attendance/summaries:
+    post:
+      tags: [Attendance]
+      operationId: getAttendanceSummaries
+      summary: Sumare zilnice pe interval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceFilter'
+      responses:
+        '201':
+          description: Zile calculate
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailySummaryView'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/attendance/dashboard:
+    post:
+      tags: [Attendance]
+      operationId: getAttendanceDashboard
+      summary: KPI-uri, trend și zone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceFilter'
+      responses:
+        '201':
+          description: Dashboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardView'
+
+  /api/attendance/month:
+    get:
+      tags: [Attendance]
+      operationId: getMonthAggregates
+      summary: Agregate lunare per angajat
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+            example: 2026
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+        - name: employeeIds
+          in: query
+          schema:
+            type: string
+            example: '1,2,3'
+          description: ID-uri separate prin virgulă
+        - name: departments
+          in: query
+          schema:
+            type: string
+          description: Departamente separate prin virgulă
+      responses:
+        '200':
+          description: Agregate
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonthAggregateView'
+
+  /api/attendance/day:
+    get:
+      tags: [Attendance]
+      operationId: getDayDetail
+      summary: Detaliu o zi (timeline badge)
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: date
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/DateString'
+      responses:
+        '200':
+          description: Detaliu sau `null` dacă nu există sumar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayDetailView'
+              examples:
+                missing:
+                  summary: Fără sumar
+                  value: null
+    delete:
+      tags: [Attendance]
+      operationId: deleteAttendanceDay
+      summary: Șterge evenimentele și sumarul unei zile
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: date
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/DateString'
+      responses:
+        '200':
+          description: Șters
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, eventsDeleted, summariesDeleted]
+                properties:
+                  ok:
+                    type: boolean
+                    enum: [true]
+                  eventsDeleted:
+                    type: integer
+                  summariesDeleted:
+                    type: integer
+        '404':
+          description: Nimic de șters pentru angajat + dată
+
+  /api/attendance/recompute:
+    post:
+      tags: [Attendance]
+      operationId: recomputeAttendance
+      summary: Recalculează pontajul pe interval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecomputeInput'
+      responses:
+        '201':
+          description: Câți angajați au fost recalculați
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [employees]
+                properties:
+                  employees:
+                    type: integer
+
+  /api/attendance/correction:
+    post:
+      tags: [Attendance]
+      operationId: applyDayCorrection
+      summary: Corecție manuală pe o zi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DayCorrectionInput'
+      responses:
+        '201':
+          description: Rând DailySummary (Prisma)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailySummaryRecord'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Attendance]
+      operationId: clearDayCorrection
+      summary: Anulează corecția și recompute
+      parameters:
+        - name: employeeId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: date
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/DateString'
+      responses:
+        '200':
+          description: Corecție ștearsă
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+
+  /api/imports/preview:
+    post:
+      tags: [Imports]
+      operationId: previewImport
+      summary: Parsează un fișier CSV/PDF fără a-l salva
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Maxim 25 MB
+      responses:
+        '201':
+          description: Preview (inclusiv `previewId` pentru commit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPreview'
+        '400':
+          description: Lipsă fișier sau parse error
+
+  /api/imports/commit:
+    post:
+      tags: [Imports]
+      operationId: commitImport
+      summary: Confirmă importul din preview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportCommitInput'
+      responses:
+        '201':
+          description: Import salvat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/imports:
+    get:
+      tags: [Imports]
+      operationId: listImportBatches
+      summary: Istoric importuri
+      responses:
+        '200':
+          description: Batch-uri
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImportBatchView'
+
+  /api/imports/{id}:
+    delete:
+      tags: [Imports]
+      operationId: deleteImportBatch
+      summary: Șterge un batch și evenimentele asociate, apoi recompute
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Șters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/exports/templates:
+    get:
+      tags: [Exports]
+      operationId: listExportTemplates
+      summary: Listează template-urile de export
+      responses:
+        '200':
+          description: Template-uri
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExportTemplate'
+    post:
+      tags: [Exports]
+      operationId: createExportTemplate
+      summary: Creează un template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportTemplateInput'
+      responses:
+        '201':
+          description: Template creat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportTemplate'
+
+  /api/exports/templates/{id}:
+    put:
+      tags: [Exports]
+      operationId: updateExportTemplate
+      summary: Actualizează un template
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportTemplateInput'
+      responses:
+        '200':
+          description: Template actualizat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportTemplate'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Exports]
+      operationId: deleteExportTemplate
+      summary: Șterge un template
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Șters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/exports/availability:
+    post:
+      tags: [Exports]
+      operationId: exportAvailability
+      summary: Verifică dacă există date în interval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportAvailabilityInput'
+      responses:
+        '201':
+          description: Are date sau nu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportAvailability'
+
+  /api/exports/generate:
+    post:
+      tags: [Exports]
+      operationId: generateExport
+      summary: Generează XLSX sau CSV (binary)
+      description: |
+        `400` dacă nu există date în interval.
+        Headere extra: `X-TTAH-Emailed` (`sent` | `skipped` | `failed`),
+        `X-TTAH-Email-To`, `X-TTAH-Email-Error`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+      responses:
+        '200':
+          description: Fișier atașat
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              example: 'attachment; filename="ttah-summary-2026-01.xlsx"'
+            X-TTAH-Emailed:
+              schema:
+                type: string
+                enum: [sent, skipped, failed]
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Fără date în interval / validare
+
+  /api/config/schedule:
+    get:
+      tags: [Config]
+      operationId: getScheduleConfig
+      summary: Program global
+      responses:
+        '200':
+          description: Program
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleConfig'
+    put:
+      tags: [Config]
+      operationId: setScheduleConfig
+      summary: Salvează programul global
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleConfig'
+      responses:
+        '200':
+          description: Valoarea salvată
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleConfig'
+
+  /api/config/lunch:
+    get:
+      tags: [Config]
+      operationId: getLunchConfig
+      summary: Config prânz
+      responses:
+        '200':
+          description: Prânz
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LunchConfig'
+    put:
+      tags: [Config]
+      operationId: setLunchConfig
+      summary: Salvează config prânz
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LunchConfig'
+      responses:
+        '200':
+          description: Valoarea salvată
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LunchConfig'
+
+  /api/config/thresholds:
+    get:
+      tags: [Config]
+      operationId: getThresholdConfig
+      summary: Praguri (short exit, rounding, overtime)
+      responses:
+        '200':
+          description: Praguri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThresholdConfig'
+    put:
+      tags: [Config]
+      operationId: setThresholdConfig
+      summary: Salvează pragurile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThresholdConfig'
+      responses:
+        '200':
+          description: Valoarea salvată
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThresholdConfig'
+
+  /api/config/retention:
+    get:
+      tags: [Config]
+      operationId: getRetention
+      summary: Retenție date (luni)
+      responses:
+        '200':
+          description: Luni de retenție
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetentionConfig'
+    put:
+      tags: [Config]
+      operationId: setRetention
+      summary: Setează retenția (1–120 luni)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetentionConfig'
+      responses:
+        '200':
+          description: Valoarea salvată (JSON number)
+          content:
+            application/json:
+              schema:
+                type: integer
+
+  /api/config/conditions:
+    get:
+      tags: [Config]
+      operationId: getConditions
+      summary: Reguli speciale (pipeline)
+      responses:
+        '200':
+          description: Reguli
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConditionRule'
+    put:
+      tags: [Config]
+      operationId: replaceConditions
+      summary: Înlocuiește tot setul de reguli
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConditionRuleInput'
+      responses:
+        '200':
+          description: Setul nou
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConditionRule'
+
+  /api/config/holidays:
+    get:
+      tags: [Config]
+      operationId: listHolidays
+      summary: Sărbători legale
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Sărbători
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Holiday'
+    post:
+      tags: [Config]
+      operationId: upsertHoliday
+      summary: Creează sau actualizează o sărbătoare (după dată)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HolidayInput'
+      responses:
+        '201':
+          description: Sărbătoare
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Holiday'
+
+  /api/config/holidays/{id}:
+    delete:
+      tags: [Config]
+      operationId: deleteHoliday
+      summary: Șterge o sărbătoare
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Șters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+
+  /api/config/leaves:
+    get:
+      tags: [Config]
+      operationId: listLeaves
+      summary: Concedii / remote
+      parameters:
+        - name: from
+          in: query
+          schema:
+            $ref: '#/components/schemas/DateString'
+        - name: to
+          in: query
+          schema:
+            $ref: '#/components/schemas/DateString'
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Leaves
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Leave'
+    post:
+      tags: [Config]
+      operationId: upsertLeave
+      summary: Creează sau actualizează un leave (employeeId + dată)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveInput'
+      responses:
+        '201':
+          description: Leave
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Leave'
+
+  /api/config/leaves/{id}:
+    delete:
+      tags: [Config]
+      operationId: deleteLeave
+      summary: Șterge un leave
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Șters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+
+  /api/mail/report-policy:
+    get:
+      tags: [Mail]
+      operationId: getMailReportPolicy
+      summary: Politică trimitere export pe email
+      responses:
+        '200':
+          description: Politică publică (fără secrete)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailReportPolicy'
+
+  /api/mail/problem-report-policy:
+    get:
+      tags: [Mail]
+      operationId: getProblemReportPolicy
+      summary: Poate userul raporta o problemă?
+      description: Permis și când `mustChangePassword` e true.
+      responses:
+        '200':
+          description: Politică
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailProblemReportPolicy'
+
+  /api/mail/problem-report:
+    post:
+      tags: [Mail]
+      operationId: sendProblemReport
+      summary: Trimite „Report a problem”
+      description: |
+        Permis și când `mustChangePassword` e true.
+        Limită 5 rapoarte / oră per user. Screenshot opțional, max 2 MB, JPEG/PNG/WebP.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [intendedAction, whatHappened, expected]
+              properties:
+                intendedAction:
+                  type: string
+                  minLength: 10
+                  maxLength: 2000
+                whatHappened:
+                  type: string
+                  minLength: 10
+                  maxLength: 2000
+                expected:
+                  type: string
+                  minLength: 10
+                  maxLength: 2000
+                pageUrl:
+                  type: string
+                  maxLength: 2000
+                viewport:
+                  type: string
+                  maxLength: 80
+                screenshot:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Trimis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemReportResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Mail neconfigurat sau fără destinatar
+
+  /api/mail/config:
+    get:
+      tags: [Mail]
+      operationId: getMailConfig
+      summary: Config Graph (fără client secret)
+      description: "**admin**"
+      x-roles: [admin]
+      responses:
+        '200':
+          description: Config public
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailConfigView'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Mail]
+      operationId: setMailConfig
+      summary: Salvează config Graph
+      description: |
+        **admin**. `clientSecret` e opțional — dacă lipsește, se păstrează secretul existent.
+      x-roles: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MailConfigInput'
+      responses:
+        '200':
+          description: Config salvat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailConfigView'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/mail/verify:
+    post:
+      tags: [Mail]
+      operationId: verifyMail
+      summary: Verifică token Graph
+      description: "**admin**"
+      x-roles: [admin]
+      responses:
+        '201':
+          description: Conexiune OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailVerifyResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Graph eșuat / neconfigurat
+
+  /api/mail/test:
+    post:
+      tags: [Mail]
+      operationId: sendTestMail
+      summary: Trimite un email de test
+      description: "**admin**"
+      x-roles: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendTestMailInput'
+      responses:
+        '201':
+          description: Trimis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailSendResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Mail neconfigurat
+
+  /api/audit:
+    get:
+      tags: [Audit]
+      operationId: listAudit
+      summary: Jurnal audit
+      description: |
+        Non-admin vede doar acțiunile proprii. Admin poate filtra cu `userId`.
+        Implicit `limit=100`, maxim 500.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 500
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: userId
+          in: query
+          schema:
+            type: integer
+          description: Doar admin; ignorat pentru `user`
+      responses:
+        '200':
+          description: Pagină de audit (`total` fără `page`/`pageSize`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditList'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: JWT HttpOnly setat de `/api/auth/login` sau `/api/auth/refresh`.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Același JWT ca `access_token` (util pentru Newman / scripturi).
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  responses:
+    Unauthorized:
+      description: Lipsă sau JWT invalid / expirat
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Forbidden:
+      description: Rol insuficient sau `PASSWORD_CHANGE_REQUIRED`
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          examples:
+            roles:
+              value:
+                statusCode: 403
+                message: Insufficient permissions
+                error: Forbidden
+            password:
+              value:
+                statusCode: 403
+                message: PASSWORD_CHANGE_REQUIRED
+                error: Forbidden
+    ValidationError:
+      description: Body/query invalid (Zod)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            statusCode: 400
+            error: ValidationError
+            message:
+              - 'username: String must contain at least 1 character(s)'
+    NotFound:
+      description: Resursa nu există
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    TooManyRequests:
+      description: Rate limit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    DateString:
+      type: string
+      pattern: '^\d{4}-\d{2}-\d{2}$'
+      example: '2026-08-19'
+    TimeString:
+      type: string
+      pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+      example: '09:00'
+    Password:
+      type: string
+      minLength: 10
+      maxLength: 128
+      description: Minim 10 caractere, cel puțin o literă și o cifră
+      example: ChangeMe1ab
+    Role:
+      type: string
+      enum: [admin, user]
+    DoorRole:
+      type: string
+      enum: [IN, OUT, NEUTRAL]
+    EventType:
+      type: string
+      enum: [ACCESS_GRANTED, ACCESS_DENIED, OTHER]
+    LeaveType:
+      type: string
+      enum: [vacation, sick, remote, other]
+    ConditionType:
+      type: string
+      enum:
+        - MIN_SESSION_MINUTES
+        - GRACE_START_MINUTES
+        - GRACE_END_MINUTES
+        - ROUND_DAILY_MINUTES
+        - IGNORE_ZONE
+        - MAX_DAILY_MINUTES
+    AnomalyFlag:
+      type: string
+      enum:
+        - MISSING_EXIT
+        - MISSING_ENTRY
+        - OVERNIGHT
+        - ZERO_DURATION
+        - ONLY_OUTSIDE_SCHEDULE
+        - MANUAL_OVERRIDE
+        - EARLY_START
+        - OVERTIME
+    ExportKind:
+      type: string
+      enum: [summary, pontaj, raw]
+    ExportFormat:
+      type: string
+      enum: [xlsx, csv]
+    MetricKey:
+      type: string
+      enum:
+        - employeeName
+        - department
+        - daysPresent
+        - workedHours
+        - workedMinutes
+        - lunchMinutes
+        - expectedHours
+        - overtimeHours
+        - deficitHours
+        - firstIn
+        - lastOut
+        - anomalies
+    WelcomeEmailStatus:
+      type: string
+      enum: [sent, skipped, failed]
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+    ApiError:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode:
+          type: integer
+        message:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+    HealthStatus:
+      type: object
+      required: [status, db, time]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        db:
+          type: string
+          enum: [up, down]
+        time:
+          type: string
+          format: date-time
+    SessionUser:
+      type: object
+      required: [id, username, role, mustChangePassword]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        mustChangePassword:
+          type: boolean
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+    ForgotPasswordInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+    ResetPasswordInput:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$'
+        newPassword:
+          $ref: '#/components/schemas/Password'
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          $ref: '#/components/schemas/Password'
+    UserAccountView:
+      type: object
+      required:
+        - id
+        - username
+        - firstName
+        - lastName
+        - email
+        - role
+        - isActive
+        - mustChangePassword
+        - managedByConfig
+        - passwordResetRequestedAt
+        - lastLoginAt
+        - lockedUntil
+        - failedAttempts
+        - createdAt
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        firstName:
+          type: string
+          nullable: true
+        lastName:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        role:
+          $ref: '#/components/schemas/Role'
+        isActive:
+          type: boolean
+        mustChangePassword:
+          type: boolean
+        managedByConfig:
+          type: boolean
+        passwordResetRequestedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+        lockedUntil:
+          type: string
+          format: date-time
+          nullable: true
+        failedAttempts:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    CreateUserInput:
+      type: object
+      required: [username, firstName, lastName, email, initialPassword]
+      properties:
+        username:
+          type: string
+          minLength: 2
+          maxLength: 64
+          pattern: '^[a-zA-Z0-9._-]+$'
+        firstName:
+          type: string
+          maxLength: 80
+        lastName:
+          type: string
+          maxLength: 80
+        email:
+          type: string
+          format: email
+          description: Trebuie să se termine cu `@orioninc.com`
+        role:
+          $ref: '#/components/schemas/Role'
+          default: user
+        initialPassword:
+          $ref: '#/components/schemas/Password'
+    CreateUserResult:
+      allOf:
+        - $ref: '#/components/schemas/UserAccountView'
+        - type: object
+          required: [welcomeEmail, welcomeEmailError]
+          properties:
+            welcomeEmail:
+              $ref: '#/components/schemas/WelcomeEmailStatus'
+            welcomeEmailError:
+              type: string
+              nullable: true
+    UpdateUserInput:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+        isActive:
+          type: boolean
+        initialPassword:
+          $ref: '#/components/schemas/Password'
+    UpdateUserResult:
+      allOf:
+        - $ref: '#/components/schemas/UserAccountView'
+        - type: object
+          properties:
+            passwordEmail:
+              $ref: '#/components/schemas/WelcomeEmailStatus'
+            passwordEmailError:
+              type: string
+              nullable: true
+    LoginHistory:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+          nullable: true
+        username:
+          type: string
+        at:
+          type: string
+          format: date-time
+        ip:
+          type: string
+          nullable: true
+        userAgent:
+          type: string
+          nullable: true
+        success:
+          type: boolean
+    EmployeeView:
+      type: object
+      required: [id, canonicalName, displayName, active, departments]
+      properties:
+        id:
+          type: integer
+        canonicalName:
+          type: string
+        displayName:
+          type: string
+        active:
+          type: boolean
+        departments:
+          type: array
+          items:
+            type: string
+        aliases:
+          type: array
+          items:
+            type: string
+    UpdateEmployeeInput:
+      type: object
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 160
+        active:
+          type: boolean
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+    EmployeeSchedule:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        startTime:
+          type: string
+          nullable: true
+        endTime:
+          type: string
+          nullable: true
+        workingDays:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 7
+    EmployeeScheduleInput:
+      type: object
+      properties:
+        startTime:
+          allOf:
+            - $ref: '#/components/schemas/TimeString'
+          nullable: true
+        endTime:
+          allOf:
+            - $ref: '#/components/schemas/TimeString'
+          nullable: true
+        workingDays:
+          type: array
+          nullable: true
+          items:
+            type: integer
+            minimum: 1
+            maximum: 7
+    OfficeView:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    OfficeCreateInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+    ReaderView:
+      type: object
+      properties:
+        id:
+          type: integer
+        doorId:
+          type: integer
+        rawLocation:
+          type: string
+        readerNo:
+          type: integer
+          nullable: true
+        panel:
+          type: string
+          nullable: true
+        role:
+          $ref: '#/components/schemas/DoorRole'
+        autoDetected:
+          type: boolean
+        eventCount:
+          type: integer
+        valid:
+          type: boolean
+    DoorView:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        floor:
+          type: string
+          nullable: true
+        officeId:
+          type: integer
+          nullable: true
+        officeName:
+          type: string
+          nullable: true
+        eventCount:
+          type: integer
+        readers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReaderView'
+    DoorRecord:
+      type: object
+      description: Răspuns Prisma la PATCH /doors/{id}
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        floor:
+          type: string
+          nullable: true
+        groupingKey:
+          type: string
+        officeId:
+          type: integer
+          nullable: true
+    DoorUpdateInput:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        officeId:
+          type: integer
+          nullable: true
+        floor:
+          type: string
+          maxLength: 40
+          nullable: true
+    ReaderUpdateInput:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/DoorRole'
+    ReaderRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        doorId:
+          type: integer
+        rawLocation:
+          type: string
+        readerNo:
+          type: integer
+          nullable: true
+        panel:
+          type: string
+          nullable: true
+        role:
+          $ref: '#/components/schemas/DoorRole'
+        autoDetected:
+          type: boolean
+    AttendanceFilter:
+      type: object
+      required: [from, to]
+      properties:
+        from:
+          $ref: '#/components/schemas/DateString'
+        to:
+          $ref: '#/components/schemas/DateString'
+        employeeIds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        departments:
+          type: array
+          items:
+            type: string
+        zones:
+          type: array
+          items:
+            type: string
+        directions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoorRole'
+    DayInterval:
+      type: object
+      properties:
+        start:
+          type: string
+        end:
+          type: string
+        source:
+          type: string
+          enum: [inside, merged-short-exit, grace]
+        zone:
+          type: string
+          nullable: true
+    DailySummaryView:
+      type: object
+      properties:
+        date:
+          $ref: '#/components/schemas/DateString'
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        workedMinutes:
+          type: integer
+        lunchMinutes:
+          type: integer
+        earlyMinutes:
+          type: integer
+        overtimeMinutes:
+          type: integer
+        firstIn:
+          type: string
+          nullable: true
+        lastOut:
+          type: string
+          nullable: true
+        perZone:
+          type: object
+          additionalProperties:
+            type: number
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnomalyFlag'
+        manual:
+          type: boolean
+        manualReason:
+          type: string
+          nullable: true
+        intervals:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayInterval'
+    DayEventIssue:
+      type: string
+      enum: [unmatched-exit, unclosed-entry, already-inside, neutral, not-granted]
+    DayAccessEventView:
+      type: object
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+        time:
+          type: string
+          example: '09:01:22'
+        role:
+          $ref: '#/components/schemas/DoorRole'
+        doorLabel:
+          type: string
+        zone:
+          type: string
+          nullable: true
+        eventType:
+          $ref: '#/components/schemas/EventType'
+        issue:
+          allOf:
+            - $ref: '#/components/schemas/DayEventIssue'
+          nullable: true
+        insideAfter:
+          type: boolean
+    DayDetailView:
+      allOf:
+        - $ref: '#/components/schemas/DailySummaryView'
+        - type: object
+          properties:
+            events:
+              type: array
+              items:
+                $ref: '#/components/schemas/DayAccessEventView'
+            schedule:
+              type: object
+              properties:
+                startTime:
+                  $ref: '#/components/schemas/TimeString'
+                endTime:
+                  $ref: '#/components/schemas/TimeString'
+    DashboardKpis:
+      type: object
+      properties:
+        employees:
+          type: integer
+        daysPresent:
+          type: integer
+        totalWorkedMinutes:
+          type: integer
+        avgWorkedMinutesPerDay:
+          type: integer
+        anomalies:
+          type: integer
+        rangeFrom:
+          $ref: '#/components/schemas/DateString'
+        rangeTo:
+          $ref: '#/components/schemas/DateString'
+    TrendPoint:
+      type: object
+      properties:
+        date:
+          $ref: '#/components/schemas/DateString'
+        workedMinutes:
+          type: integer
+        employeesPresent:
+          type: integer
+    ZoneBreakdown:
+      type: object
+      properties:
+        zone:
+          type: string
+        minutes:
+          type: integer
+    DashboardView:
+      type: object
+      required: [kpis, trend, zones]
+      properties:
+        kpis:
+          $ref: '#/components/schemas/DashboardKpis'
+        trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendPoint'
+        zones:
+          type: array
+          items:
+            $ref: '#/components/schemas/ZoneBreakdown'
+    MonthAggregateView:
+      type: object
+      properties:
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        department:
+          type: string
+          nullable: true
+        year:
+          type: integer
+        month:
+          type: integer
+        daysPresent:
+          type: integer
+        workedMinutes:
+          type: integer
+        lunchMinutes:
+          type: integer
+        expectedMinutes:
+          type: integer
+        overtimeMinutes:
+          type: integer
+        deficitMinutes:
+          type: integer
+        perZone:
+          type: object
+          additionalProperties:
+            type: number
+        anomalies:
+          type: integer
+    RecomputeInput:
+      type: object
+      required: [from, to]
+      properties:
+        from:
+          $ref: '#/components/schemas/DateString'
+        to:
+          $ref: '#/components/schemas/DateString'
+        employeeIds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+    DayCorrectionInput:
+      type: object
+      required: [employeeId, date, workedMinutes, reason]
+      properties:
+        employeeId:
+          type: integer
+          minimum: 1
+        date:
+          $ref: '#/components/schemas/DateString'
+        workedMinutes:
+          type: integer
+          minimum: 0
+          maximum: 1440
+        lunchMinutes:
+          type: integer
+          minimum: 0
+          maximum: 240
+          default: 0
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 280
+    DailySummaryRecord:
+      type: object
+      description: Rând Prisma (datele DateTime vin ISO)
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        date:
+          type: string
+          format: date-time
+        workedMinutes:
+          type: integer
+        lunchMinutes:
+          type: integer
+        earlyMinutes:
+          type: integer
+        overtimeMinutes:
+          type: integer
+        firstIn:
+          type: string
+          format: date-time
+          nullable: true
+        lastOut:
+          type: string
+          format: date-time
+          nullable: true
+        perZone: {}
+        flags:
+          type: array
+          items:
+            type: string
+        intervals: {}
+        manual:
+          type: boolean
+        manualReason:
+          type: string
+          nullable: true
+        computedAt:
+          type: string
+          format: date-time
+    ParsedEventRow:
+      type: object
+      properties:
+        occurredAt:
+          type: string
+        rawLocation:
+          type: string
+        direction:
+          $ref: '#/components/schemas/DoorRole'
+        eventType:
+          $ref: '#/components/schemas/EventType'
+        zone:
+          type: string
+          nullable: true
+        floor:
+          type: string
+          nullable: true
+        employeeName:
+          type: string
+          nullable: true
+    ImportPreviewEmployee:
+      type: object
+      properties:
+        rawUserName:
+          type: string
+        department:
+          type: string
+          nullable: true
+        matchedEmployeeId:
+          type: integer
+          nullable: true
+        eventCount:
+          type: integer
+    DiscoveredDoor:
+      type: object
+      properties:
+        rawLocation:
+          type: string
+        readerNo:
+          type: integer
+          nullable: true
+        panel:
+          type: string
+          nullable: true
+        floor:
+          type: string
+          nullable: true
+        suggestedName:
+          type: string
+        suggestedRole:
+          $ref: '#/components/schemas/DoorRole'
+    ImportPreview:
+      type: object
+      properties:
+        previewId:
+          type: string
+        fileName:
+          type: string
+        fileHash:
+          type: string
+        kind:
+          type: string
+          enum: [single, multi]
+        rawUserName:
+          type: string
+        canonicalName:
+          type: string
+        matchedEmployeeId:
+          type: integer
+          nullable: true
+        department:
+          type: string
+          nullable: true
+        rangeFrom:
+          type: string
+          nullable: true
+        rangeTo:
+          type: string
+          nullable: true
+        rowsTotal:
+          type: integer
+        rowsParsed:
+          type: integer
+        duplicateOfBatchId:
+          type: integer
+          nullable: true
+        newDoors:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiscoveredDoor'
+        sampleRows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParsedEventRow'
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportPreviewEmployee'
+        warnings:
+          type: array
+          items:
+            type: string
+    ImportCommitInput:
+      type: object
+      required: [previewId]
+      properties:
+        previewId:
+          type: string
+        employeeId:
+          type: integer
+          nullable: true
+        employeeName:
+          type: string
+          maxLength: 120
+          nullable: true
+    ImportResult:
+      type: object
+      properties:
+        batchId:
+          type: integer
+        employeeId:
+          type: integer
+        employeeCount:
+          type: integer
+        rowsTotal:
+          type: integer
+        rowsNew:
+          type: integer
+        rowsDuplicate:
+          type: integer
+        affectedDates:
+          type: array
+          items:
+            type: string
+    ImportBatchView:
+      type: object
+      properties:
+        id:
+          type: integer
+        fileName:
+          type: string
+        employeeId:
+          type: integer
+        employeeName:
+          type: string
+        rangeFrom:
+          type: string
+          nullable: true
+        rangeTo:
+          type: string
+          nullable: true
+        rowsTotal:
+          type: integer
+        rowsNew:
+          type: integer
+        rowsDuplicate:
+          type: integer
+        status:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdByUsername:
+          type: string
+          nullable: true
+    ExportColumn:
+      type: object
+      required: [key, header]
+      properties:
+        key:
+          $ref: '#/components/schemas/MetricKey'
+        header:
+          type: string
+          maxLength: 60
+        width:
+          type: integer
+          minimum: 4
+          maximum: 80
+    ExportTemplateLayout:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 120
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExportColumn'
+        includeTotals:
+          type: boolean
+          default: true
+        matrixMetric:
+          type: string
+          enum: [workedHours, workedMinutes]
+          default: workedHours
+    ExportTemplateInput:
+      type: object
+      required: [name, kind, layout]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        kind:
+          $ref: '#/components/schemas/ExportKind'
+        layout:
+          $ref: '#/components/schemas/ExportTemplateLayout'
+        isDefault:
+          type: boolean
+          default: false
+    ExportTemplate:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ExportKind'
+        layout: {}
+        isDefault:
+          type: boolean
+        createdById:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ExportRequest:
+      type: object
+      required: [filter]
+      properties:
+        templateId:
+          type: integer
+          nullable: true
+        kind:
+          $ref: '#/components/schemas/ExportKind'
+          description: Folosit doar dacă `templateId` lipsește (layout built-in)
+        format:
+          $ref: '#/components/schemas/ExportFormat'
+          default: xlsx
+        filter:
+          $ref: '#/components/schemas/AttendanceFilter'
+        sendEmail:
+          type: boolean
+    ExportAvailabilityInput:
+      type: object
+      required: [filter]
+      properties:
+        filter:
+          $ref: '#/components/schemas/AttendanceFilter'
+    ExportAvailability:
+      type: object
+      required: [hasData]
+      properties:
+        hasData:
+          type: boolean
+    ScheduleConfig:
+      type: object
+      properties:
+        startTime:
+          allOf:
+            - $ref: '#/components/schemas/TimeString'
+          default: '09:00'
+        endTime:
+          allOf:
+            - $ref: '#/components/schemas/TimeString'
+          default: '17:30'
+        workingDays:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 7
+          default: [1, 2, 3, 4, 5]
+          description: ISO weekday, 1=luni … 7=duminică
+    LunchConfig:
+      type: object
+      properties:
+        windowStart:
+          $ref: '#/components/schemas/TimeString'
+        windowEnd:
+          $ref: '#/components/schemas/TimeString'
+        capMinutes:
+          type: integer
+          minimum: 0
+          maximum: 240
+          default: 30
+        forceMinimum:
+          type: boolean
+          default: false
+    ThresholdConfig:
+      type: object
+      properties:
+        shortExitMinutes:
+          type: integer
+          minimum: 0
+          maximum: 120
+          default: 10
+        roundingMinutes:
+          type: integer
+          minimum: 0
+          maximum: 60
+          default: 0
+        overtimeThresholdMinutes:
+          type: integer
+          minimum: 0
+          maximum: 240
+          default: 15
+    RetentionConfig:
+      type: object
+      required: [months]
+      properties:
+        months:
+          type: integer
+          minimum: 1
+          maximum: 120
+    ConditionRuleInput:
+      type: object
+      required: [type]
+      properties:
+        type:
+          $ref: '#/components/schemas/ConditionType'
+        params:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+          default: true
+        order:
+          type: integer
+          default: 0
+    ConditionRule:
+      allOf:
+        - $ref: '#/components/schemas/ConditionRuleInput'
+        - type: object
+          properties:
+            id:
+              type: integer
+    HolidayInput:
+      type: object
+      required: [date, name]
+      properties:
+        date:
+          $ref: '#/components/schemas/DateString'
+        name:
+          type: string
+          maxLength: 160
+    Holiday:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date-time
+        name:
+          type: string
+    LeaveInput:
+      type: object
+      required: [employeeId, date, type]
+      properties:
+        employeeId:
+          type: integer
+          minimum: 1
+        date:
+          $ref: '#/components/schemas/DateString'
+        type:
+          $ref: '#/components/schemas/LeaveType'
+        note:
+          type: string
+          maxLength: 280
+          nullable: true
+    Leave:
+      type: object
+      properties:
+        id:
+          type: integer
+        employeeId:
+          type: integer
+        date:
+          type: string
+          format: date-time
+        type:
+          $ref: '#/components/schemas/LeaveType'
+        note:
+          type: string
+          nullable: true
+    MailReportPolicy:
+      type: object
+      properties:
+        sendByDefault:
+          type: boolean
+        recipient:
+          type: string
+        canSend:
+          type: boolean
+    MailProblemReportPolicy:
+      type: object
+      properties:
+        canSend:
+          type: boolean
+    ProblemReportResult:
+      type: object
+      properties:
+        id:
+          type: string
+    MailConfigView:
+      type: object
+      properties:
+        authority:
+          type: string
+        clientId:
+          type: string
+        scope:
+          type: string
+        senderMailbox:
+          type: string
+        fromAddress:
+          type: string
+        fromName:
+          type: string
+        reportRecipient:
+          type: string
+        sendReportByDefault:
+          type: boolean
+        problemReportRecipient:
+          type: string
+        hasClientSecret:
+          type: boolean
+        configured:
+          type: boolean
+    MailConfigInput:
+      type: object
+      required: [authority, clientId, scope, senderMailbox, fromAddress]
+      properties:
+        authority:
+          type: string
+          format: uri
+        clientId:
+          type: string
+        clientSecret:
+          type: string
+          description: Omit dacă vrei să păstrezi secretul salvat
+        scope:
+          type: string
+        senderMailbox:
+          type: string
+          format: email
+        fromAddress:
+          type: string
+          format: email
+        fromName:
+          type: string
+        reportRecipient:
+          type: string
+          description: Adrese separate prin virgulă sau punct și virgulă
+        sendReportByDefault:
+          type: boolean
+        problemReportRecipient:
+          type: string
+    MailVerifyResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        expiresIn:
+          type: integer
+    MailSendResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+    SendTestMailInput:
+      type: object
+      required: [to, subject, body]
+      properties:
+        to:
+          type: string
+          format: email
+        cc:
+          type: string
+          format: email
+        subject:
+          type: string
+          maxLength: 200
+        body:
+          type: string
+          maxLength: 10000
+    AuditLogView:
+      type: object
+      properties:
+        id:
+          type: integer
+        at:
+          type: string
+          format: date-time
+        userId:
+          type: integer
+          nullable: true
+        username:
+          type: string
+          nullable: true
+        action:
+          type: string
+        entity:
+          type: string
+        entityId:
+          type: string
+          nullable: true
+        before: {}
+        after: {}
+    AuditList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogView'
+        total:
+          type: integer

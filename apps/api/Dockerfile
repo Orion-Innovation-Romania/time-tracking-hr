@@ -12,6 +12,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
+COPY docs/openapi.yaml ./docs/openapi.yaml
 RUN pnpm --filter @ttah/shared build \
  && pnpm --filter @ttah/api prisma:generate \
  && pnpm --filter @ttah/api build \

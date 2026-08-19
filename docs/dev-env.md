@@ -203,6 +203,21 @@ pnpm --filter @ttah/api exec prisma migrate dev --name <nume_schimbare>
 
 ---
 
+## 9b. OpenAPI (QA)
+
+Spec: [`docs/openapi.yaml`](openapi.yaml) — import în Postman / Bruno / Newman.
+
+UI interactiv (cu API-ul pornit): http://localhost:4000/api/docs
+
+- JSON: `http://localhost:4000/api/docs-json`
+- YAML: `http://localhost:4000/api/docs.yaml`
+
+Autentificare: `POST /api/auth/login` setează cookie-uri HttpOnly. În Postman activează cookie jar.
+Opțional: `Authorization: Bearer <access_token>` (aceeași valoare ca cookie-ul).
+Oprește UI-ul cu `OPENAPI_ENABLED=false`.
+
+---
+
 ## 10. Troubleshooting
 
 | Simptom | Fix |

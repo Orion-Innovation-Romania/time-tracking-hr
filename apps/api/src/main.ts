@@ -2,8 +2,10 @@ import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { setupOpenApi } from './openapi/setup-openapi';
 
 async function listen(app: Awaited<ReturnType<typeof NestFactory.create>>, port: number) {
   const log = new Logger('Bootstrap');
@@ -25,8 +27,13 @@ async function listen(app: Awaited<ReturnType<typeof NestFactory.create>>, port:
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
-  app.use(helmet());
+  const securityHeaders = helmet();
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/api/docs')) return next();
+    return securityHeaders(req, res, next);
+  });
   app.use(cookieParser());
+  setupOpenApi(app);
   // Watch restarts on Windows send SIGTERM; skip graceful hooks in dev so the
   // old process releases :4000 before the new one binds.
   if (process.env.NODE_ENV === 'production') {
